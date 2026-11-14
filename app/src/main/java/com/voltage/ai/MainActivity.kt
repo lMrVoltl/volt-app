@@ -5,7 +5,11 @@ import android.app.ActivityManager
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.Settings
 import android.util.Base64
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
@@ -100,6 +104,9 @@ class MainActivity : AppCompatActivity() {
             loadUrl("file:///android_asset/index.html")
         }
         setContentView(webView)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+            startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
+        }
     }
 
     fun onNativeToken(token: String) {
@@ -151,7 +158,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     val json = JSONObject(raw)
                     val models = json.getJSONArray("models")
-                    val dir = getExternalFilesDir("models")!!
+                    val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "VoltModels")
                     for (i in 0 until models.length()) {
                         val m = models.getJSONObject(i)
                         val file = File(dir, m.getString("id") + ".gguf")
@@ -170,7 +177,7 @@ class MainActivity : AppCompatActivity() {
         fun downloadModel(id: String, urlStr: String) {
             thread {
                 try {
-                    val dir = getExternalFilesDir("models")!!
+                    val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "VoltModels")
                     if (!dir.exists()) dir.mkdirs()
                     val target = File(dir, "$id.gguf")
                     val tmp = File(dir, "$id.gguf.part")
@@ -216,7 +223,7 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun loadModel(id: String) {
             thread {
-                val file = File(getExternalFilesDir("models"), "$id.gguf")
+                val file = File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "VoltModels"), "$id.gguf")
                 val ok = file.exists() && nativeLoadModel(file.absolutePath, 6)
                 runOnUiThread { webView.evaluateJavascript("window.onModelLoaded('$id', $ok)", null) }
             }
