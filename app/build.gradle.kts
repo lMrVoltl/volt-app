@@ -9,11 +9,11 @@ android {
         applicationId = "com.voltage.ai"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.1.0"
         ndk { abiFilters += listOf("arm64-v8a") }
         externalNativeBuild {
-            cmake { arguments += listOf("-DANDROID_STL=c++_shared") }
+            cmake { arguments += listOf("-DANDROID_STL=c++_shared", "-DCMAKE_BUILD_TYPE=Release") }
         }
     }
     buildTypes {
@@ -33,4 +33,5 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.webkit:webkit:1.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 }

@@ -3,11 +3,20 @@ package com.voltage.ai
 import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.content.Context
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Bundle
+import android.util.Base64
 import android.webkit.JavascriptInterface
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -27,6 +36,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private lateinit var webView: WebView
+    private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
+
+    private val fileChooserLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uris = WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+        fileUploadCallback?.onReceiveValue(uris)
+        fileUploadCallback = null
+    }
 
     private val smartDns = object : Dns {
         override fun lookup(hostname: String): List<InetAddress> {
@@ -38,9 +56,7 @@ class MainActivity : AppCompatActivity() {
                 val ips = mutableListOf<InetAddress>()
                 for (i in 0 until answers.length()) {
                     val item = answers.getJSONObject(i)
-                    if (item.optInt("type") == 1) {
-                        ips.add(InetAddress.getByName(item.getString("data")))
-                    }
+                    if (item.optInt("type") == 1) ips.add(InetAddress.getByName(item.getString("data")))
                 }
                 if (ips.isEmpty()) throw e else ips
             }
@@ -65,7 +81,21 @@ class MainActivity : AppCompatActivity() {
         webView = WebView(this).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
+            settings.allowFileAccess = true
             webViewClient = WebViewClient()
+            webChromeClient = object : WebChromeClient() {
+                override fun onShowFileChooser(
+                    view: WebView?,
+                    filePathCallback: ValueCallback<Array<Uri>>?,
+                    fileChooserParams: FileChooserParams?
+                ): Boolean {
+                    fileUploadCallback?.onReceiveValue(null)
+                    fileUploadCallback = filePathCallback
+                    val intent = fileChooserParams?.createIntent() ?: return false
+                    fileChooserLauncher.launch(intent)
+                    return true
+                }
+            }
             addJavascriptInterface(VoltBridge(), "VoltAndroid")
             loadUrl("file:///android_asset/index.html")
         }
@@ -90,6 +120,27 @@ class MainActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
+        fun recognizeImageOcr(base64Data: String) {
+            try {
+                val clean = base64Data.substringAfter(",")
+                val bytes = Base64.decode(clean, Base64.DEFAULT)
+                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                val image = InputImage.fromBitmap(bmp, 0)
+                val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                recognizer.process(image)
+                    .addOnSuccessListener { visionText ->
+                        val q = JSONObject.quote(visionText.text)
+                        webView.evaluateJavascript("window.onOcrDone($q)", null)
+                    }
+                    .addOnFailureListener {
+                        webView.evaluateJavascript("window.onOcrDone('')", null)
+                    }
+            } catch (_: Exception) {
+                runOnUiThread { webView.evaluateJavascript("window.onOcrDone('')", null) }
+            }
+        }
+
+        @JavascriptInterface
         fun fetchCatalog() {
             thread {
                 try {
@@ -107,14 +158,10 @@ class MainActivity : AppCompatActivity() {
                         m.put("downloaded", file.exists() && file.length() > 10_000_000)
                     }
                     val quoted = JSONObject.quote(json.toString())
-                    runOnUiThread {
-                        webView.evaluateJavascript("window.onCatalogLoaded($quoted)", null)
-                    }
+                    runOnUiThread { webView.evaluateJavascript("window.onCatalogLoaded($quoted)", null) }
                 } catch (e: Exception) {
                     val err = JSONObject.quote(e.message ?: "Ошибка сети")
-                    runOnUiThread {
-                        webView.evaluateJavascript("window.onCatalogError($err)", null)
-                    }
+                    runOnUiThread { webView.evaluateJavascript("window.onCatalogError($err)", null) }
                 }
             }
         }
@@ -161,9 +208,7 @@ class MainActivity : AppCompatActivity() {
                     runOnUiThread { webView.evaluateJavascript("window.onDownloadDone('$id')", null) }
                 } catch (e: Exception) {
                     val err = JSONObject.quote(e.message ?: "Ошибка загрузки")
-                    runOnUiThread {
-                        webView.evaluateJavascript("window.onDownloadError('$id', $err)", null)
-                    }
+                    runOnUiThread { webView.evaluateJavascript("window.onDownloadError('$id', $err)", null) }
                 }
             }
         }
@@ -172,15 +217,15 @@ class MainActivity : AppCompatActivity() {
         fun loadModel(id: String) {
             thread {
                 val file = File(getExternalFilesDir("models"), "$id.gguf")
-                val ok = file.exists() && nativeLoadModel(file.absolutePath, 4)
+                val ok = file.exists() && nativeLoadModel(file.absolutePath, 6)
                 runOnUiThread { webView.evaluateJavascript("window.onModelLoaded('$id', $ok)", null) }
             }
         }
 
         @JavascriptInterface
-        fun sendPrompt(prompt: String) {
+        fun sendPrompt(formattedHistory: String) {
             thread {
-                nativeGenerate(prompt)
+                nativeGenerate(formattedHistory)
                 runOnUiThread { webView.evaluateJavascript("window.onVoltDone()", null) }
             }
         }

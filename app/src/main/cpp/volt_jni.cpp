@@ -22,7 +22,8 @@ Java_com_voltage_ai_MainActivity_nativeLoadModel(JNIEnv* env, jobject, jstring j
     if (!g_model) return JNI_FALSE;
 
     auto cparams = llama_context_default_params();
-    cparams.n_ctx = 2048;
+    cparams.n_ctx = 4096;
+    cparams.n_batch = 512;
     cparams.n_threads = threads;
     cparams.n_threads_batch = threads;
     g_ctx = llama_init_from_model(g_model, cparams);
@@ -43,11 +44,11 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(JNIEnv* env, jobject thiz, jstri
     jmethodID onToken = env->GetMethodID(cls, "onNativeToken", "(Ljava/lang/String;)V");
 
     const char* raw = env->GetStringUTFChars(jprompt, nullptr);
-    std::string prompt = "<|im_start|>system\nТы Volt AI — быстрый локальный ассистент на смартфоне. Отвечай чётко и по делу.<|im_end|>\n<|im_start|>user\n" + std::string(raw) + "<|im_end|>\n<|im_start|>assistant\n";
+    std::string prompt = "<|im_start|>system\nТы Volt AI — быстрый локальный ассистент на смартфоне. Отвечай структурированно, используя Markdown.<|im_end|>\n" + std::string(raw) + "<|im_start|>assistant\n";
     env->ReleaseStringUTFChars(jprompt, raw);
 
     const llama_vocab* vocab = llama_model_get_vocab(g_model);
-    std::vector<llama_token> tokens(prompt.size() + 16);
+    std::vector<llama_token> tokens(prompt.size() + 32);
     int n_tokens = llama_tokenize(vocab, prompt.c_str(), prompt.size(), tokens.data(), tokens.size(), true, true);
     if (n_tokens < 0) return;
     tokens.resize(n_tokens);
@@ -60,7 +61,7 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(JNIEnv* env, jobject thiz, jstri
     llama_sampler_chain_add(smpl, llama_sampler_init_temp(0.6f));
     llama_sampler_chain_add(smpl, llama_sampler_init_dist(42));
 
-    for (int i = 0; i < 512 && !g_stop; i++) {
+    for (int i = 0; i < 1024 && !g_stop; i++) {
         llama_token id = llama_sampler_sample(smpl, g_ctx, -1);
         if (llama_vocab_is_eog(vocab, id)) break;
 
