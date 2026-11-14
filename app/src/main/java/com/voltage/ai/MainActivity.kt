@@ -3,9 +3,9 @@ package com.voltage.ai
 import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -24,6 +24,7 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -75,8 +76,8 @@ class MainActivity : AppCompatActivity() {
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    external fun nativeLoadModel(path: String, threads: Int): Boolean
-    external fun nativeGenerate(prompt: String)
+    external fun nativeLoadModel(path: String, threads: Int, nCtx: Int): Boolean
+    external fun nativeGenerate(prompt: String, sysPrompt: String, temp: Float, topP: Float, maxTokens: Int)
     external fun nativeStop()
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -109,9 +110,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun modelsDir(): File {
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "VoltModels")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
     fun onNativeToken(token: String) {
         val escaped = JSONObject.quote(token)
         runOnUiThread { webView.evaluateJavascript("window.onVoltToken($escaped)", null) }
+    }
+
+    fun onNativeStats(tokens: Int, tps: Double, totalSec: Double) {
+        runOnUiThread {
+            webView.evaluateJavascript("window.onVoltStats($tokens, $tps, $totalSec)", null)
+        }
     }
 
     inner class VoltBridge {
@@ -123,6 +136,57 @@ class MainActivity : AppCompatActivity() {
             return JSONObject()
                 .put("free_mb", mi.availMem / (1024 * 1024))
                 .put("total_mb", mi.totalMem / (1024 * 1024))
+                .toString()
+        }
+
+        @JavascriptInterface
+        fun getDeviceHardwareJson(): String {
+            val rawSoc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MODEL else Build.HARDWARE
+            val socTitle = when {
+                rawSoc.contains("7450", true) -> "Qualcomm Snapdragon 7 Gen 1"
+                rawSoc.contains("7325", true) -> "Qualcomm Snapdragon 778G"
+                rawSoc.contains("8475", true) -> "Qualcomm Snapdragon 8+ Gen 1"
+                rawSoc.contains("8550", true) -> "Qualcomm Snapdragon 8 Gen 2"
+                rawSoc.contains("8650", true) -> "Qualcomm Snapdragon 8 Gen 3"
+                rawSoc.isNotBlank() && rawSoc != "unknown" -> rawSoc
+                else -> Build.MODEL
+            }
+
+            val cpuInfo = try { File("/proc/cpuinfo").readText() } catch (_: Exception) { "" }
+            val hasDotProd = cpuInfo.contains("asimddp", true)
+            val hasFp16 = cpuInfo.contains("fphp", true) || cpuInfo.contains("asimdhp", true)
+            val hasI8mm = cpuInfo.contains("i8mm", true)
+
+            val simdList = mutableListOf("ARM64 NEON")
+            if (hasDotProd) simdList.add("DotProd")
+            if (hasFp16) simdList.add("FP16")
+            if (hasI8mm) simdList.add("I8MM")
+
+            val cores = Runtime.getRuntime().availableProcessors()
+            val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val mi = ActivityManager.MemoryInfo()
+            am.getMemoryInfo(mi)
+            val totalGb = Math.round((mi.totalMem / (1024.0 * 1024.0 * 1024.0)) * 10.0) / 10.0
+
+            val supported = JSONArray().apply {
+                put(JSONObject().put("tier", "0.5B • Volt Photon").put("quant", "Q4_K_M / Q5_K_M / Q8_0").put("status", "Максимальная скорость"))
+                put(JSONObject().put("tier", "1.5B – 2B • Volt Plasma").put("quant", "Q4_K_M / Q5_K_M").put("status", "Оптимально"))
+                if (totalGb >= 7.5) {
+                    put(JSONObject().put("tier", "3B – 4B • Heavy").put("quant", "Q4_K_M").put("status", if (hasDotProd) "Поддерживается (ускорение DotProd)" else "Поддерживается"))
+                }
+                if (totalGb >= 11.0) {
+                    put(JSONObject().put("tier", "7B – 8B • Ultra").put("quant", "IQ4_XS / Q4_K_M").put("status", "Запуск при >4.5 ГБ свободной RAM"))
+                }
+            }
+
+            return JSONObject()
+                .put("device", "${Build.MANUFACTURER.uppercase()} ${Build.MODEL}")
+                .put("soc", socTitle)
+                .put("socCode", rawSoc)
+                .put("cores", cores)
+                .put("totalGb", totalGb)
+                .put("simd", simdList.joinToString(" • "))
+                .put("supported", supported)
                 .toString()
         }
 
@@ -158,7 +222,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     val json = JSONObject(raw)
                     val models = json.getJSONArray("models")
-                    val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "VoltModels")
+                    val dir = modelsDir()
                     for (i in 0 until models.length()) {
                         val m = models.getJSONObject(i)
                         val file = File(dir, m.getString("id") + ".gguf")
@@ -177,8 +241,7 @@ class MainActivity : AppCompatActivity() {
         fun downloadModel(id: String, urlStr: String) {
             thread {
                 try {
-                    val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "VoltModels")
-                    if (!dir.exists()) dir.mkdirs()
+                    val dir = modelsDir()
                     val target = File(dir, "$id.gguf")
                     val tmp = File(dir, "$id.gguf.part")
 
@@ -221,18 +284,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
-        fun loadModel(id: String) {
+        fun loadModel(id: String, threads: Int, nCtx: Int) {
             thread {
-                val file = File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "VoltModels"), "$id.gguf")
-                val ok = file.exists() && nativeLoadModel(file.absolutePath, 6)
+                val file = File(modelsDir(), "$id.gguf")
+                val ok = file.exists() && nativeLoadModel(file.absolutePath, threads, nCtx)
                 runOnUiThread { webView.evaluateJavascript("window.onModelLoaded('$id', $ok)", null) }
             }
         }
 
         @JavascriptInterface
-        fun sendPrompt(formattedHistory: String) {
+        fun sendPrompt(formattedHistory: String, sysPrompt: String, temp: Float, topP: Float, maxTokens: Int) {
             thread {
-                nativeGenerate(formattedHistory)
+                nativeGenerate(formattedHistory, sysPrompt, temp, topP, maxTokens)
                 runOnUiThread { webView.evaluateJavascript("window.onVoltDone()", null) }
             }
         }

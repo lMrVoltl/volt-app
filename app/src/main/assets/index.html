@@ -8,9 +8,9 @@
   :root{--bg:#131314;--surf:#1e1f20;--surf2:#282a2c;--txt:#e3e3e3;--sub:#9aa0a6;--acc:#a8c7fa;--accTxt:#062e6f;--ok:#81c995}
   *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,system-ui,sans-serif}
   body{background:var(--bg);color:var(--txt);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
-  header{height:56px;padding:0 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
-  .pill{background:var(--surf);border:none;color:var(--txt);padding:8px 14px;border-radius:20px;font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px}
-  .icon-btn{width:40px;height:40px;border-radius:20px;border:none;background:transparent;color:var(--txt);display:grid;place-items:center}
+  header{height:56px;padding:0 10px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:6px}
+  .pill{background:var(--surf);border:none;color:var(--txt);padding:8px 14px;border-radius:20px;font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;max-width:56vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .icon-btn{width:38px;height:38px;border-radius:19px;border:none;background:transparent;color:var(--txt);display:grid;place-items:center;flex-shrink:0}
   main{flex:1;overflow-y:auto;padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px}
   .welcome{margin:auto 0;padding:16px 4px}
   .welcome h1{font-size:28px;font-weight:500;background:linear-gradient(90deg,#a8c7fa,#c58af9);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
@@ -20,7 +20,10 @@
   .att-tag{font-size:12px;color:var(--acc);background:rgba(168,199,250,.12);padding:4px 8px;border-radius:8px;margin-bottom:6px;display:inline-block}
   .msg-a{display:flex;gap:10px;align-items:flex-start;font-size:15px;line-height:1.55}
   .spark{width:26px;height:26px;border-radius:13px;background:var(--surf2);display:grid;place-items:center;flex-shrink:0;color:var(--acc);margin-top:2px}
-  .bot-txt{flex:1;min-width:0;word-break:break-word}
+  .bot-wrap{flex:1;min-width:0}
+  .bot-txt{word-break:break-word}
+  .stats-bar{margin-top:8px;display:inline-flex;align-items:center;gap:8px;background:var(--surf);border:1px solid rgba(255,255,255,.06);padding:4px 10px;border-radius:12px;font-size:11.5px;color:var(--sub);font-variant-numeric:tabular-nums}
+  .stats-bar b{color:var(--ok);font-weight:600}
   .bot-txt pre{background:#0d0d0e;padding:12px;border-radius:12px;overflow-x:auto;margin:8px 0;font-family:monospace;font-size:13px;position:relative}
   .bot-txt code{font-family:monospace;background:var(--surf2);padding:2px 5px;border-radius:5px;font-size:13px}
   .bot-txt pre code{background:transparent;padding:0}
@@ -31,20 +34,35 @@
   .preview-bar img{height:36px;width:36px;object-fit:cover;border-radius:8px}
   .dock{background:var(--surf);border-radius:28px;padding:8px 10px 8px 8px;display:flex;align-items:flex-end;gap:6px;position:relative;z-index:2}
   .attach-btn{width:40px;height:40px;border-radius:20px;border:none;background:var(--surf2);color:var(--txt);display:grid;place-items:center;flex-shrink:0}
-  textarea{flex:1;background:transparent;border:none;color:var(--txt);font-size:16px;resize:none;max-height:120px;outline:none;padding:8px 4px}
+  textarea.inp{flex:1;background:transparent;border:none;color:var(--txt);font-size:16px;resize:none;max-height:120px;outline:none;padding:8px 4px}
   .send{width:40px;height:40px;border-radius:20px;border:none;background:var(--acc);color:var(--accTxt);display:grid;place-items:center;flex-shrink:0}
   .drawer-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;z-index:30}
   .drawer-bg.open{display:flex}
   .drawer{background:var(--surf);width:80%;max-width:300px;height:100%;padding:20px 14px;display:flex;flex-direction:column;gap:10px}
   .chat-item{padding:11px 12px;border-radius:14px;display:flex;justify-content:space-between;align-items:center;font-size:14px;color:var(--txt)}
   .chat-item.active{background:var(--surf2);color:var(--acc);font-weight:500}
-  .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;z-index:25}
+  .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:flex-end;z-index:25}
   .sheet-bg.open{display:flex}
-  .sheet{background:var(--surf);width:100%;border-radius:28px 28px 0 0;padding:20px 16px 28px;max-height:82dvh;overflow-y:auto}
+  .sheet{background:var(--surf);width:100%;border-radius:28px 28px 0 0;padding:20px 16px 32px;max-height:88dvh;overflow-y:auto}
   .card{background:var(--surf2);border-radius:20px;padding:14px;margin-top:12px}
   .badge{display:inline-block;font-size:11px;padding:3px 9px;border-radius:12px;background:rgba(129,201,149,.18);color:var(--ok);margin-bottom:6px}
-  .btn{width:100%;margin-top:10px;padding:10px;border-radius:14px;border:none;background:var(--acc);color:var(--accTxt);font-weight:600;font-size:14px}
+  .btn{width:100%;margin-top:10px;padding:11px;border-radius:14px;border:none;background:var(--acc);color:var(--accTxt);font-weight:600;font-size:14px}
   .btn.sec{background:var(--surf);color:var(--txt)}
+  /* OriginOS / HyperOS Style SoC Card */
+  .os-hero{background:linear-gradient(135deg,#1d293e 0%,#261e38 55%,#1b232e 100%);border:1px solid rgba(168,199,250,.22);border-radius:24px;padding:18px;margin-top:12px;position:relative;overflow:hidden}
+  .os-tag{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--acc);font-weight:600}
+  .os-soc{font-size:20px;font-weight:700;color:#fff;margin-top:4px;line-height:1.25}
+  .os-dev{font-size:12px;color:#b8c4d9;margin-top:2px}
+  .bento{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+  .bento-box{background:rgba(255,255,255,.06);backdrop-filter:blur(8px);border-radius:16px;padding:10px 12px}
+  .bento-lbl{font-size:11px;color:#9aa0a6}
+  .bento-val{font-size:14px;font-weight:600;color:#fff;margin-top:2px}
+  .sup-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:12.5px}
+  .sup-row:last-child{border-bottom:none}
+  .set-row{margin-top:14px}
+  .set-head{display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:6px}
+  input[type=range]{width:100%;accent-color:var(--acc)}
+  select,textarea.sys-inp{width:100%;background:var(--surf2);color:var(--txt);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px 12px;font-size:14px;outline:none}
 </style>
 </head>
 <body>
@@ -56,9 +74,14 @@
     <span id="curModelName">Выбрать модель</span>
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
   </button>
-  <button class="icon-btn" onclick="createNewChat()">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-  </button>
+  <div style="display:flex;gap:2px">
+    <button class="icon-btn" onclick="createNewChat()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <button class="icon-btn" onclick="openSettings()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
 </header>
 
 <main id="chat"></main>
@@ -74,7 +97,7 @@
     <button class="attach-btn" onclick="document.getElementById('fileInp').click()">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
     </button>
-    <textarea id="inp" rows="1" placeholder="Спросите Volt..." oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+    <textarea class="inp" id="inp" rows="1" placeholder="Спросите Volt..." oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
     <button class="send" id="sendBtn" onclick="send()">
       <svg id="sendIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
     </button>
@@ -86,6 +109,7 @@
     <button class="btn" style="margin-top:0" onclick="createNewChat();closeDrawer()">+ Новый чат</button>
     <div style="font-size:12px;color:var(--sub);margin-top:8px">Недавние чаты</div>
     <div id="chatList" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
+    <button class="btn sec" onclick="closeDrawer();openSettings()">⚙ Настройки и процессор</button>
   </div>
 </div>
 
@@ -99,8 +123,74 @@
   </div>
 </div>
 
+<div class="sheet-bg" id="settingsSheet" onclick="if(event.target===this)closeSheets()">
+  <div class="sheet">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h3>Настройки Volt AI</h3>
+      <button onclick="closeSheets()" style="background:none;border:none;color:var(--sub);font-size:18px">✕</button>
+    </div>
+
+    <div class="os-hero" id="hwCard">
+      <div class="os-tag">VOLTAGE ENGINE • ОБОРУДОВАНИЕ</div>
+      <div class="os-soc" id="hwSoc">Определение чипа...</div>
+      <div class="os-dev" id="hwDev"></div>
+      <div class="bento">
+        <div class="bento-box"><div class="bento-lbl">Архитектура</div><div class="bento-val" id="hwCores">—</div></div>
+        <div class="bento-box"><div class="bento-lbl">Оперативная память</div><div class="bento-val" id="hwRam">—</div></div>
+        <div class="bento-box" style="grid-column:span 2"><div class="bento-lbl">Инструкции ускорения AI</div><div class="bento-val" id="hwSimd">—</div></div>
+      </div>
+      <div style="margin-top:14px;font-size:12px;color:#b8c4d9;font-weight:600">Поддерживаемые модели</div>
+      <div id="hwSupported" style="margin-top:4px"></div>
+    </div>
+
+    <div class="card">
+      <b>Параметры генерации</b>
+      <div class="set-row">
+        <div class="set-head"><span>Температура (креативность)</span><b id="valTemp">0.6</b></div>
+        <input type="range" id="setTemp" min="0.1" max="1.5" step="0.1" oninput="document.getElementById('valTemp').innerText=this.value">
+      </div>
+      <div class="set-row">
+        <div class="set-head"><span>Top-P (разнообразие слов)</span><b id="valTopP">0.9</b></div>
+        <input type="range" id="setTopP" min="0.1" max="1.0" step="0.05" oninput="document.getElementById('valTopP').innerText=this.value">
+      </div>
+      <div class="set-row">
+        <div class="set-head"><span>Макс. длина ответа (токенов)</span><b id="valMax">1024</b></div>
+        <input type="range" id="setMax" min="256" max="2048" step="128" oninput="document.getElementById('valMax').innerText=this.value">
+      </div>
+      <div class="set-row">
+        <div class="set-head"><span>Потоки CPU (ядра)</span><b id="valThreads">6</b></div>
+        <input type="range" id="setThreads" min="2" max="8" step="1" oninput="document.getElementById('valThreads').innerText=this.value">
+      </div>
+      <div class="set-row">
+        <div class="set-head"><span>Окно контекста (память диалога)</span></div>
+        <select id="setCtx">
+          <option value="2048">2048 токенов (экономия RAM)</option>
+          <option value="4096">4096 токенов (стандарт)</option>
+          <option value="8192">8192 токенов (длинные файлы)</option>
+        </select>
+      </div>
+      <div class="set-row" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Показывать скорость под ответом</span>
+        <input type="checkbox" id="setStats" style="width:20px;height:20px;accent-color:var(--acc)">
+      </div>
+      <div class="set-row">
+        <div class="set-head"><span>Системный промпт (характер ИИ)</span></div>
+        <textarea class="sys-inp" id="setSys" rows="3"></textarea>
+      </div>
+      <button class="btn" onclick="saveSettings()">Сохранить настройки</button>
+    </div>
+  </div>
+</div>
+
 <script>
-let freeRamMb = 2000, models = [], activeId = null, activeBotEl = null, rawStream = '', generating = false;
+const DEFAULT_CFG = {
+  temp: 0.6, topP: 0.9, maxTokens: 1024, threads: 6, ctx: 4096, showStats: true,
+  sysPrompt: 'Ты Volt AI — быстрый локальный ассистент на смартфоне. Отвечай структурированно, используя Markdown.'
+};
+let cfg = Object.assign({}, DEFAULT_CFG, JSON.parse(localStorage.getItem('volt_cfg') || '{}'));
+
+let freeRamMb = 2000, models = [], activeId = null, activeBotEl = null, activeStatsEl = null;
+let rawStream = '', genStartTs = 0, approxTokens = 0, lastStatsStr = '', generating = false;
 let chats = JSON.parse(localStorage.getItem('volt_chats') || '[]');
 let currentChatId = null, pendingAttachment = null;
 
@@ -109,6 +199,52 @@ function openDrawer(){ renderChatList(); document.getElementById('drawerBg').cla
 function closeDrawer(){ document.getElementById('drawerBg').classList.remove('open'); }
 function openSheet(id){ document.getElementById(id).classList.add('open'); }
 function closeSheets(){ document.querySelectorAll('.sheet-bg').forEach(e=>e.classList.remove('open')); }
+
+function openSettings() {
+  document.getElementById('setTemp').value = cfg.temp;
+  document.getElementById('valTemp').innerText = cfg.temp;
+  document.getElementById('setTopP').value = cfg.topP;
+  document.getElementById('valTopP').innerText = cfg.topP;
+  document.getElementById('setMax').value = cfg.maxTokens;
+  document.getElementById('valMax').innerText = cfg.maxTokens;
+  document.getElementById('setThreads').value = cfg.threads;
+  document.getElementById('valThreads').innerText = cfg.threads;
+  document.getElementById('setCtx').value = String(cfg.ctx);
+  document.getElementById('setStats').checked = cfg.showStats;
+  document.getElementById('setSys').value = cfg.sysPrompt;
+
+  if (window.VoltAndroid && VoltAndroid.getDeviceHardwareJson) {
+    const hw = JSON.parse(VoltAndroid.getDeviceHardwareJson());
+    document.getElementById('hwSoc').innerText = hw.soc;
+    document.getElementById('hwDev').innerText = hw.device + ' (' + hw.socCode + ')';
+    document.getElementById('hwCores').innerText = hw.cores + ' ядер ARM64';
+    document.getElementById('hwRam').innerText = hw.totalGb + ' ГБ LPDDR5';
+    document.getElementById('hwSimd').innerText = hw.simd;
+    const supBox = document.getElementById('hwSupported');
+    supBox.innerHTML = '';
+    hw.supported.forEach(s => {
+      supBox.innerHTML += '<div class="sup-row"><div><b>' + s.tier + '</b><div style="font-size:11px;color:#9aa0a6">' + s.quant + '</div></div><span style="color:var(--ok);font-size:11.5px;text-align:right">' + s.status + '</span></div>';
+    });
+  }
+  openSheet('settingsSheet');
+}
+
+function saveSettings() {
+  const prevThreads = cfg.threads, prevCtx = cfg.ctx;
+  cfg.temp = parseFloat(document.getElementById('setTemp').value);
+  cfg.topP = parseFloat(document.getElementById('setTopP').value);
+  cfg.maxTokens = parseInt(document.getElementById('setMax').value);
+  cfg.threads = parseInt(document.getElementById('setThreads').value);
+  cfg.ctx = parseInt(document.getElementById('setCtx').value);
+  cfg.showStats = document.getElementById('setStats').checked;
+  cfg.sysPrompt = document.getElementById('setSys').value.trim() || DEFAULT_CFG.sysPrompt;
+  localStorage.setItem('volt_cfg', JSON.stringify(cfg));
+  closeSheets();
+  renderCurrentChat();
+  if (activeId && (prevThreads !== cfg.threads || prevCtx !== cfg.ctx)) {
+    activateModel(activeId);
+  }
+}
 
 function formatMd(txt) {
   let esc = txt.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -163,7 +299,7 @@ function renderCurrentChat() {
   if (!c || !c.messages.length) {
     const freeGb = (freeRamMb / 1024).toFixed(1);
     box.innerHTML = '<div class="welcome" id="welcome"><h1>Привет, Volt AI</h1><p id="ramHint">' +
-      (activeId ? 'Модель готова. Можно писать текст, кидать код или фото.' : 'Свободно ' + freeGb + ' ГБ RAM. Выбери модель сверху.') + '</p></div>';
+      (activeId ? 'Модель готова. Можно писать текст, кидать код или фото с текстом.' : 'Свободно ' + freeGb + ' ГБ RAM. Выбери модель сверху.') + '</p></div>';
     return;
   }
   box.innerHTML = '';
@@ -180,7 +316,8 @@ function renderCurrentChat() {
     } else {
       const a = document.createElement('div');
       a.className = 'msg-a';
-      a.innerHTML = '<div class="spark">✦</div><div class="bot-txt">' + formatMd(m.text) + '</div>';
+      const statsHtml = (cfg.showStats && m.stats) ? '<div class="stats-bar">' + m.stats + '</div>' : '';
+      a.innerHTML = '<div class="spark">✦</div><div class="bot-wrap"><div class="bot-txt">' + formatMd(m.text) + '</div>' + statsHtml + '</div>';
       box.appendChild(a);
     }
   });
@@ -221,7 +358,7 @@ function handleFile(inp) {
 window.onOcrDone = (txt) => {
   if (pendingAttachment && pendingAttachment.type === 'image') {
     pendingAttachment.extracted = txt;
-    document.getElementById('prevLabel').innerText = txt.trim() ? '🖼 Фото + распознанный текст' : '🖼 Фото прикреплено';
+    document.getElementById('prevLabel').innerText = txt.trim() ? '🖼 Фото + распознанный текст' : '🖼 Фото (текст не найден)';
   }
 };
 
@@ -296,7 +433,7 @@ function activateModel(id) {
   if (!m) return;
   document.getElementById('curModelName').innerText = 'Загрузка ' + m.name + '...';
   closeSheets();
-  VoltAndroid.loadModel(id);
+  VoltAndroid.loadModel(id, cfg.threads, cfg.ctx);
 }
 window.onModelLoaded = (id, ok) => {
   const m = models.find(x => x.id === id);
@@ -334,7 +471,7 @@ function send() {
       llmText = (txt || 'Разбери содержимое файла:') + '\n\n[Файл: ' + pendingAttachment.name + ']\n' + pendingAttachment.content;
     } else if (pendingAttachment.type === 'image') {
       userMsg.img = pendingAttachment.dataUrl;
-      llmText = (txt || 'Что изображено на фото?') + (pendingAttachment.extracted ? '\n\n[Текст с изображения]:\n' + pendingAttachment.extracted : '\n\n[Пользователь прикрепил изображение без распознанного текста]');
+      llmText = (txt || 'Что изображено на фото?') + (pendingAttachment.extracted ? '\n\n[Текст с изображения]:\n' + pendingAttachment.extracted : '\n\n[Пользователь прикрепил изображение без текста]');
     }
     clearAttachment();
   }
@@ -348,10 +485,15 @@ function send() {
   const chatEl = document.getElementById('chat');
   const a = document.createElement('div');
   a.className = 'msg-a';
-  a.innerHTML = '<div class="spark">✦</div><div class="bot-txt"></div>';
+  a.innerHTML = '<div class="spark">✦</div><div class="bot-wrap"><div class="bot-txt"></div>' +
+    (cfg.showStats ? '<div class="stats-bar">Подготовка контекста...</div>' : '') + '</div>';
   chatEl.appendChild(a);
   activeBotEl = a.querySelector('.bot-txt');
+  activeStatsEl = a.querySelector('.stats-bar');
   rawStream = '';
+  approxTokens = 0;
+  genStartTs = 0;
+  lastStatsStr = '';
 
   inp.value = '';
   inp.style.height = 'auto';
@@ -363,25 +505,39 @@ function send() {
       ? '<|im_start|>user\n' + m.llmText + '<|im_end|>\n'
       : '<|im_start|>assistant\n' + m.text + '<|im_end|>\n'
   ).join('');
-  VoltAndroid.sendPrompt(recent);
+  VoltAndroid.sendPrompt(recent, cfg.sysPrompt, cfg.temp, cfg.topP, cfg.maxTokens);
 }
 
 window.onVoltToken = (tok) => {
   if (activeBotEl) {
+    if (!genStartTs) genStartTs = performance.now();
+    approxTokens++;
     rawStream += tok;
     activeBotEl.innerHTML = formatMd(rawStream);
+    if (activeStatsEl) {
+      const sec = (performance.now() - genStartTs) / 1000;
+      const tps = sec > 0.05 ? (approxTokens / sec).toFixed(1) : '0.0';
+      activeStatsEl.innerHTML = '⚡ <b>' + tps + ' ток/с</b> • ' + approxTokens + ' ток • ' + sec.toFixed(1) + ' с';
+    }
     const chatEl = document.getElementById('chat');
     chatEl.scrollTop = chatEl.scrollHeight;
   }
 };
+
+window.onVoltStats = (tokens, tps, totalSec) => {
+  lastStatsStr = '⚡ <b>' + tps.toFixed(1) + ' ток/с</b> • ' + tokens + ' токенов • ' + totalSec.toFixed(1) + ' с';
+  if (activeStatsEl) activeStatsEl.innerHTML = lastStatsStr;
+};
+
 window.onVoltDone = () => {
   const c = chats.find(x => x.id === currentChatId);
   if (c && rawStream) {
-    c.messages.push({ role: 'assistant', text: rawStream });
+    c.messages.push({ role: 'assistant', text: rawStream, stats: lastStatsStr });
     saveChats();
   }
   setGenerating(false);
   activeBotEl = null;
+  activeStatsEl = null;
 };
 </script>
 </body>
