@@ -106,7 +106,7 @@ window.onCatalogLoaded = (raw) => {
   const ready = models.find(m => m.downloaded && freeRamMb >= m.min_free_ram_mb) || models.find(m => m.downloaded);
   if (ready) activateModel(ready.id);
 };
-window.onCatalogError = (err) => { document.getElementById('modelsList').innerText = 'Ошибка загрузки каталога: ' + err; };
+window.onCatalogError = (err) => { document.getElementById('modelsList').innerHTML = '<div>Ошибка: ' + err + '</div><button class="btn" onclick="VoltAndroid.fetchCatalog()">Повторить</button>'; };
 
 function renderModels() {
   const box = document.getElementById('modelsList');
