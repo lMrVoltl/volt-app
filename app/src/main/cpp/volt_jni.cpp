@@ -160,25 +160,39 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
     auto t_gen_start = std::chrono::steady_clock::now();
     auto sparams = llama_sampler_chain_default_params();
     llama_sampler* smpl = llama_sampler_chain_init(sparams);
-    llama_sampler_chain_add(smpl, llama_sampler_init_penalties(64, 1.15f, 0.0f, 0.0f));
+    llama_sampler_chain_add(smpl, llama_sampler_init_top_k(40));
     llama_sampler_chain_add(smpl, llama_sampler_init_top_p(topP, 1));
     llama_sampler_chain_add(smpl, llama_sampler_init_temp(temp));
     llama_sampler_chain_add(smpl, llama_sampler_init_dist(42));
 
     int generated = 0;
     int limit = maxTokens > 0 ? maxTokens : 1024;
+    llama_token prev_id = -1;
+    int same_tok_count = 0;
+
     for (int i = 0; i < limit && !g_stop; i++) {
         llama_token id = llama_sampler_sample(smpl, g_ctx, -1);
         if (llama_vocab_is_eog(vocab, id)) break;
 
-        generated++;
+        if (id == prev_id) {
+            same_tok_count++;
+            if (same_tok_count >= 4) break;
+        } else {
+            same_tok_count = 0;
+            prev_id = id;
+        }
+
         char buf[256];
+        // special = false скрывает служебные токены <|im_start|>, <|box_start|> и <|object_ref_start|>
         int n = llama_token_to_piece(vocab, id, buf, sizeof(buf), 0, false);
         if (n > 0) {
             std::string piece(buf, n);
-            jstring jpiece = env->NewStringUTF(piece.c_str());
-            env->CallVoidMethod(thiz, onToken, jpiece);
-            env->DeleteLocalRef(jpiece);
+            if (piece.find("<|") == std::string::npos) {
+                generated++;
+                jstring jpiece = env->NewStringUTF(piece.c_str());
+                env->CallVoidMethod(thiz, onToken, jpiece);
+                env->DeleteLocalRef(jpiece);
+            }
         }
         if (llama_decode(g_ctx, llama_batch_get_one(&id, 1)) != 0) break;
     }
