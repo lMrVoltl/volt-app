@@ -15,6 +15,7 @@ static llama_context* g_ctx = nullptr;
 static mtmd_context* g_mtmd = nullptr;
 static std::atomic<bool> g_stop{false};
 static std::string g_lastMtmdErr;
+static const char* VOLT_MEDIA_MARKER = "<__media__>";
 
 static void volt_mtmd_log_cb(enum ggml_log_level level, const char* text, void*) {
     if (level == GGML_LOG_LEVEL_ERROR && text != nullptr) {
@@ -25,7 +26,6 @@ static void volt_mtmd_log_cb(enum ggml_log_level level, const char* text, void*)
     }
 }
 
-// Проверка завершенности UTF-8 последовательности, чтобы NewStringUTF не падал на разорванных русских буквах
 static size_t valid_utf8_prefix_len(const std::string& s) {
     size_t i = 0;
     size_t n = s.size();
@@ -48,7 +48,6 @@ static size_t valid_utf8_prefix_len(const std::string& s) {
     return i;
 }
 
-// Поиск ID токенов для подавления боксов (<|box_start|>, <|object_ref_start|>, <|quad_start|>) и <|im_start|>
 static std::vector<llama_token> collect_banned_vision_tokens(const llama_vocab* vocab) {
     std::vector<llama_token> banned_ids;
     const char* banned_tokens[] = {
@@ -109,6 +108,7 @@ Java_com_voltage_ai_MainActivity_nativeLoadModel(
             auto mctx_params = mtmd_context_params_default();
             mctx_params.use_gpu = false;
             mctx_params.n_threads = threads;
+            mctx_params.media_marker = VOLT_MEDIA_MARKER;
             g_mtmd = mtmd_init_from_file(mmpath, g_model, mctx_params);
         }
         env->ReleaseStringUTFChars(jmmproj, mmpath);
@@ -169,7 +169,6 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
                     visionState = -3;
                 } else {
                     g_lastMtmdErr.clear();
-                    const char* marker = mtmd_default_marker();
 
                     std::string fullPrompt;
                     size_t pos = userHistory.rfind("<|im_start|>user\n");
@@ -177,11 +176,11 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
                         std::string beforeUser = userHistory.substr(0, pos + 17);
                         std::string userContent = userHistory.substr(pos + 17);
                         fullPrompt = "<|im_start|>system\n" + sysStr + "<|im_end|>\n"
-                                   + beforeUser + std::string(marker) + "\n" + userContent
+                                   + beforeUser + std::string(VOLT_MEDIA_MARKER) + "\n" + userContent
                                    + "<|im_start|>assistant\n";
                     } else {
                         fullPrompt = "<|im_start|>system\n" + sysStr + "<|im_end|>\n"
-                                   + "<|im_start|>user\n" + std::string(marker) + "\n" + userHistory + "<|im_end|>\n"
+                                   + "<|im_start|>user\n" + std::string(VOLT_MEDIA_MARKER) + "\n" + userHistory + "<|im_end|>\n"
                                    + "<|im_start|>assistant\n";
                     }
 
