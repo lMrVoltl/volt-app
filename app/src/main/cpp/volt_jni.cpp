@@ -122,9 +122,11 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
                     }
 
                     mtmd_input_chunks* chunks = mtmd_input_chunks_init();
-                    mtmd_input_part p0 = { prefix.c_str(), nullptr, true };
-                    mtmd_input_part p1 = { "", bmp, false };
-                    mtmd_input_part p2 = { suffix.c_str(), nullptr, true };
+                    mtmd_input_text t0 = { prefix.c_str(), true, true };
+                    mtmd_input_text t2 = { suffix.c_str(), false, true };
+                    mtmd_input_part p0 = { &t0, nullptr };
+                    mtmd_input_part p1 = { nullptr, bmp };
+                    mtmd_input_part p2 = { &t2, nullptr };
                     const mtmd_input_part* partsArr[3] = { &p0, &p1, &p2 };
 
                     int tokRes = mtmd_tokenize_from_parts(g_mtmd, chunks, partsArr, 3, true);
