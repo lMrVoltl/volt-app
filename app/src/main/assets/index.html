@@ -46,13 +46,17 @@
   .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:flex-end;z-index:25}
   .sheet-bg.open{display:flex}
   .sheet{background:var(--surf);width:100%;border-radius:28px 28px 0 0;padding:20px 16px 32px;max-height:88dvh;overflow-y:auto}
-  .card{background:var(--surf2);border-radius:20px;padding:15px;margin-top:12px}
-  .grp-head{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--acc);margin-bottom:2px}
-  .grp-sub{font-size:12px;color:var(--sub);margin-bottom:6px}
+  .tabs-bar{display:flex;gap:6px;overflow-x:auto;padding:12px 0 4px;scrollbar-width:none}
+  .tabs-bar::-webkit-scrollbar{display:none}
+  .tab-chip{background:var(--surf2);color:var(--sub);border:1px solid rgba(255,255,255,.06);padding:6px 13px;border-radius:16px;font-size:12.5px;font-weight:500;white-space:nowrap}
+  .tab-chip.active{background:var(--acc);color:var(--accTxt);border-color:var(--acc);font-weight:600}
+  .sec-title{font-size:11.5px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--acc);margin:16px 4px 6px}
+  .card{background:var(--surf2);border:1px solid rgba(255,255,255,.06);border-radius:20px;padding:15px}
+  .grp-sub{font-size:12px;color:var(--sub);margin-bottom:4px}
   .badge{display:inline-block;font-size:11px;padding:3px 9px;border-radius:12px;background:rgba(129,201,149,.18);color:var(--ok);margin-bottom:6px}
   .btn{width:100%;margin-top:12px;padding:12px;border-radius:14px;border:none;background:var(--acc);color:var(--accTxt);font-weight:600;font-size:14px}
   .btn.sec{background:var(--surf2);color:var(--txt);border:1px solid rgba(255,255,255,.08)}
-  .os-hero{background:linear-gradient(135deg,#1d293e 0%,#261e38 55%,#1b232e 100%);border:1px solid rgba(168,199,250,.22);border-radius:24px;padding:18px;margin-top:12px;position:relative;overflow:hidden}
+  .os-hero{background:linear-gradient(135deg,#1d293e 0%,#261e38 55%,#1b232e 100%);border:1px solid rgba(168,199,250,.22);border-radius:24px;padding:18px;position:relative;overflow:hidden}
   .os-tag{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--acc);font-weight:600}
   .os-soc{font-size:20px;font-weight:700;color:#fff;margin-top:4px;line-height:1.25}
   .os-dev{font-size:12px;color:#b8c4d9;margin-top:2px}
@@ -62,7 +66,8 @@
   .bento-val{font-size:14px;font-weight:600;color:#fff;margin-top:2px}
   .sup-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:12.5px}
   .sup-row:last-child{border-bottom:none}
-  .set-row{margin-top:14px}
+  .set-row{margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.05)}
+  .set-row:first-of-type{margin-top:8px;padding-top:0;border-top:none}
   .set-head{display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:6px}
   .set-hint{font-size:11.5px;color:var(--sub);margin-top:3px}
   input[type=range]{width:100%;accent-color:var(--acc)}
@@ -134,79 +139,84 @@
       <button onclick="closeSheets()" style="background:none;border:none;color:var(--sub);font-size:18px">✕</button>
     </div>
 
-    <!-- Группа 1: Оборудование (OriginOS / HyperOS Card) -->
-    <div class="os-hero" id="hwCard">
-      <div class="os-tag">VOLTAGE ENGINE • ОБОРУДОВАНИЕ</div>
-      <div class="os-soc" id="hwSoc">Определение чипа...</div>
-      <div class="os-dev" id="hwDev"></div>
-      <div class="bento">
-        <div class="bento-box"><div class="bento-lbl">Архитектура</div><div class="bento-val" id="hwCores">—</div></div>
-        <div class="bento-box"><div class="bento-lbl">Оперативная память</div><div class="bento-val" id="hwRam">—</div></div>
-        <div class="bento-box" style="grid-column:span 2"><div class="bento-lbl">Инструкции ускорения AI</div><div class="bento-val" id="hwSimd">—</div></div>
-      </div>
-      <div style="margin-top:14px;font-size:12px;color:#b8c4d9;font-weight:600">Совместимость моделей</div>
-      <div id="hwSupported" style="margin-top:4px"></div>
+    <div class="tabs-bar">
+      <button class="tab-chip active" onclick="filterSettings('all', this)">Все разделы</button>
+      <button class="tab-chip" onclick="filterSettings('hw', this)">Процессор</button>
+      <button class="tab-chip" onclick="filterSettings('gen', this)">Генерация</button>
+      <button class="tab-chip" onclick="filterSettings('perf', this)">Память и CPU</button>
+      <button class="tab-chip" onclick="filterSettings('ui', this)">Интерфейс и ИИ</button>
     </div>
 
-    <!-- Группа 2: Генерация и ответы -->
-    <div class="card">
-      <div class="grp-head">✦ Генерация и точность</div>
-      <div class="grp-sub">Управление логикой, креативностью и объёмом ответа</div>
-
-      <div class="set-row">
-        <div class="set-head"><span>Температура</span><b id="valTemp">0.6</b></div>
-        <input type="range" id="setTemp" min="0.1" max="1.5" step="0.1" oninput="document.getElementById('valTemp').innerText=this.value">
-        <div class="set-hint">Ниже — точнее код и факты; выше — живее текст</div>
-      </div>
-
-      <div class="set-row">
-        <div class="set-head"><span>Top-P (ширина словаря)</span><b id="valTopP">0.9</b></div>
-        <input type="range" id="setTopP" min="0.1" max="1.0" step="0.05" oninput="document.getElementById('valTopP').innerText=this.value">
-      </div>
-
-      <div class="set-row">
-        <div class="set-head"><span>Лимит длины ответа</span><b id="valMax">1024 ток.</b></div>
-        <input type="range" id="setMax" min="256" max="2048" step="128" oninput="document.getElementById('valMax').innerText=this.value+' ток.'">
-      </div>
-    </div>
-
-    <!-- Группа 3: Производительность и память -->
-    <div class="card">
-      <div class="grp-head">⚡ Производительность и память</div>
-      <div class="grp-sub">Баланс между скоростью (ток/с), нагревом и расходом RAM</div>
-
-      <div class="set-row">
-        <div class="set-head"><span>Рабочие потоки CPU</span><b id="valThreads">6 ядер</b></div>
-        <input type="range" id="setThreads" min="2" max="8" step="1" oninput="document.getElementById('valThreads').innerText=this.value+' ядер'">
-        <div class="set-hint">Для Snapdragon 7 Gen 1 оптимально 4–6 потоков</div>
-      </div>
-
-      <div class="set-row">
-        <div class="set-head"><span>Окно контекста (память диалога)</span></div>
-        <select id="setCtx">
-          <option value="2048">2048 токенов — экономия RAM (рекомендуется для 3B)</option>
-          <option value="4096">4096 токенов — сбалансированный стандарт</option>
-          <option value="8192">8192 токенов — длинные файлы и история</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- Группа 4: Интерфейс и характер ИИ -->
-    <div class="card">
-      <div class="grp-head">🎛 Интерфейс и поведение ИИ</div>
-      <div class="grp-sub">Телеметрия под сообщениями и стиль общения</div>
-
-      <div class="set-row" style="display:flex;justify-content:space-between;align-items:center">
-        <div>
-          <div style="font-size:13.5px">Статистика генерации</div>
-          <div class="set-hint">Скорость (ток/с), токены и статус Vision под ответом</div>
+    <div class="set-grp" data-grp="hw">
+      <div class="sec-title">1. Оборудование и совместимость</div>
+      <div class="os-hero" id="hwCard">
+        <div class="os-tag">VOLTAGE ENGINE • HARDWARE</div>
+        <div class="os-soc" id="hwSoc">Определение чипа...</div>
+        <div class="os-dev" id="hwDev"></div>
+        <div class="bento">
+          <div class="bento-box"><div class="bento-lbl">Архитектура</div><div class="bento-val" id="hwCores">—</div></div>
+          <div class="bento-box"><div class="bento-lbl">Оперативная память</div><div class="bento-val" id="hwRam">—</div></div>
+          <div class="bento-box" style="grid-column:span 2"><div class="bento-lbl">Инструкции ускорения AI</div><div class="bento-val" id="hwSimd">—</div></div>
         </div>
-        <input type="checkbox" id="setStats" style="width:20px;height:20px;accent-color:var(--acc)">
+        <div style="margin-top:14px;font-size:12px;color:#b8c4d9;font-weight:600">Совместимость моделей</div>
+        <div id="hwSupported" style="margin-top:4px"></div>
       </div>
+    </div>
 
-      <div class="set-row">
-        <div class="set-head"><span>Дополнительный стиль ответа</span></div>
-        <textarea class="sys-inp" id="setSys" rows="3"></textarea>
+    <div class="set-grp" data-grp="gen">
+      <div class="sec-title">2. Параметры генерации</div>
+      <div class="card">
+        <div class="grp-sub">Точность фактов, креативность и длина ответов</div>
+        <div class="set-row">
+          <div class="set-head"><span>Температура</span><b id="valTemp">0.6</b></div>
+          <input type="range" id="setTemp" min="0.1" max="1.5" step="0.1" oninput="document.getElementById('valTemp').innerText=this.value">
+          <div class="set-hint">0.2–0.5 для кода и анализа фото • 0.7–1.0 для текста</div>
+        </div>
+        <div class="set-row">
+          <div class="set-head"><span>Top-P (ширина словаря)</span><b id="valTopP">0.9</b></div>
+          <input type="range" id="setTopP" min="0.1" max="1.0" step="0.05" oninput="document.getElementById('valTopP').innerText=this.value">
+        </div>
+        <div class="set-row">
+          <div class="set-head"><span>Лимит длины ответа</span><b id="valMax">1024 ток.</b></div>
+          <input type="range" id="setMax" min="256" max="2048" step="128" oninput="document.getElementById('valMax').innerText=this.value+' ток.'">
+        </div>
+      </div>
+    </div>
+
+    <div class="set-grp" data-grp="perf">
+      <div class="sec-title">3. Производительность и память</div>
+      <div class="card">
+        <div class="grp-sub">Скорость генерации (ток/с), нагрев и расход RAM</div>
+        <div class="set-row">
+          <div class="set-head"><span>Рабочие потоки CPU</span><b id="valThreads">6 ядер</b></div>
+          <input type="range" id="setThreads" min="2" max="8" step="1" oninput="document.getElementById('valThreads').innerText=this.value+' ядер'">
+          <div class="set-hint">Для Snapdragon 7 Gen 1 оптимально 4–6 потоков</div>
+        </div>
+        <div class="set-row">
+          <div class="set-head"><span>Окно контекста (память диалога)</span></div>
+          <select id="setCtx">
+            <option value="2048">2048 токенов — экономия RAM (лучше для 3B Vision)</option>
+            <option value="4096">4096 токенов — сбалансированный стандарт</option>
+            <option value="8192">8192 токенов — длинные файлы и история</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="set-grp" data-grp="ui">
+      <div class="sec-title">4. Интерфейс и поведение ИИ</div>
+      <div class="card">
+        <div class="set-row" style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:13.5px">Статистика генерации</div>
+            <div class="set-hint">Скорость (ток/с), токены и бейдж Vision под ответом</div>
+          </div>
+          <input type="checkbox" id="setStats" style="width:20px;height:20px;accent-color:var(--acc)">
+        </div>
+        <div class="set-row">
+          <div class="set-head"><span>Стиль ответов нейросети</span></div>
+          <textarea class="sys-inp" id="setSys" rows="3"></textarea>
+        </div>
       </div>
     </div>
 
@@ -224,7 +234,8 @@ let cfg = Object.assign({}, DEFAULT_CFG, JSON.parse(localStorage.getItem('volt_c
 
 let freeRamMb = 2000, models = [], activeId = null, activeBotEl = null, activeStatsEl = null;
 let rawStream = '', genStartTs = 0, approxTokens = 0, lastStatsStr = '', generating = false;
-let chats = JSON.parse(localStorage.getItem('volt_chats') || '[]');
+let chats = [];
+try { chats = JSON.parse(localStorage.getItem('volt_chats') || '[]'); } catch (_) { chats = []; }
 let currentChatId = null, pendingAttachment = null;
 
 function buildSystemPrompt(modelObj) {
@@ -240,11 +251,35 @@ function buildSystemPrompt(modelObj) {
     'Стиль: ' + cfg.sysPrompt;
 }
 
-function saveChats(){ localStorage.setItem('volt_chats', JSON.stringify(chats)); }
+function saveChats() {
+  try {
+    const slim = chats.slice(0, 20).map(c => ({
+      id: c.id,
+      title: c.title,
+      messages: c.messages.slice(-30).map(m => {
+        const copy = Object.assign({}, m);
+        delete copy.img;
+        return copy;
+      })
+    }));
+    localStorage.setItem('volt_chats', JSON.stringify(slim));
+  } catch (e) {
+    try { localStorage.removeItem('volt_chats'); } catch (_) {}
+  }
+}
+
 function openDrawer(){ renderChatList(); document.getElementById('drawerBg').classList.add('open'); }
 function closeDrawer(){ document.getElementById('drawerBg').classList.remove('open'); }
 function openSheet(id){ document.getElementById(id).classList.add('open'); }
 function closeSheets(){ document.querySelectorAll('.sheet-bg').forEach(e=>e.classList.remove('open')); }
+
+function filterSettings(grp, btn) {
+  document.querySelectorAll('.tab-chip').forEach(el => el.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.querySelectorAll('.set-grp').forEach(el => {
+    el.style.display = (grp === 'all' || el.dataset.grp === grp) ? 'block' : 'none';
+  });
+}
 
 function fillSettingsUi() {
   document.getElementById('setTemp').value = cfg.temp;
@@ -262,6 +297,7 @@ function fillSettingsUi() {
 
 function openSettings() {
   fillSettingsUi();
+  filterSettings('all', document.querySelector('.tab-chip'));
   if (window.VoltAndroid && VoltAndroid.getDeviceHardwareJson) {
     const hw = JSON.parse(VoltAndroid.getDeviceHardwareJson());
     document.getElementById('hwSoc').innerText = hw.soc;
@@ -366,6 +402,7 @@ function renderCurrentChat() {
       u.className = 'msg-u';
       let html = '';
       if (m.img) html += '<img src="' + m.img + '">';
+      else if (m.hadImg) html += '<div class="att-tag">🖼 Изображение</div><br>';
       if (m.fileName) html += '<div class="att-tag">📎 ' + m.fileName + '</div><br>';
       html += m.displayText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
       u.innerHTML = html;
@@ -393,10 +430,15 @@ function handleFile(inp) {
     reader.onload = () => {
       imgEl.src = reader.result;
       imgEl.style.display = 'block';
-      lbl.innerText = 'Обработка изображения...';
+      const am = models.find(x => x.id === activeId);
+      lbl.innerText = (am && am.vision)
+        ? '👁 Фото готово для ' + am.name
+        : '⚠️ Для анализа фото выбери Volt Photon v2.0 или Volt Plasma v2.5';
       bar.classList.add('show');
       pendingAttachment = { type: 'image', name: file.name, dataUrl: reader.result, extracted: '' };
-      VoltAndroid.recognizeImageOcr(reader.result);
+      if (window.VoltAndroid && VoltAndroid.recognizeImageOcr) {
+        VoltAndroid.recognizeImageOcr(reader.result);
+      }
     };
     reader.readAsDataURL(file);
   } else {
@@ -415,10 +457,6 @@ function handleFile(inp) {
 window.onOcrDone = (txt) => {
   if (pendingAttachment && pendingAttachment.type === 'image') {
     pendingAttachment.extracted = txt;
-    const am = models.find(x => x.id === activeId);
-    document.getElementById('prevLabel').innerText = (am && am.vision)
-      ? '👁 Фото готово для ' + am.name
-      : '⚠️ Для анализа фото выбери Volt Photon v2.0 или Volt Plasma v2.5';
   }
 };
 
@@ -458,6 +496,7 @@ function renderModels() {
     const isAct = activeId === m.id;
     const div = document.createElement('div');
     div.className = 'card';
+    div.style.marginTop = '12px';
     div.innerHTML = (isRec ? '<div class="badge">Рекомендовано для устройства</div>' : '') +
       '<div style="display:flex;justify-content:space-between"><b>' + m.name + '</b><span style="font-size:12px;color:var(--sub)">' + m.params + ' • ' + m.size_mb + ' МБ</span></div>' +
       '<div style="font-size:11.5px;color:var(--acc);margin-top:2px">' + (m.base_model || '') + '</div>' +
@@ -516,66 +555,74 @@ function setGenerating(state) {
 }
 
 function send() {
-  if (generating) { VoltAndroid.stopGeneration(); return; }
-  const inp = document.getElementById('inp');
-  const txt = inp.value.trim();
-  if (!txt && !pendingAttachment) return;
-  if (!activeId) { openSheet('modelSheet'); return; }
+  try {
+    if (generating) { VoltAndroid.stopGeneration(); return; }
+    const inp = document.getElementById('inp');
+    const txt = inp.value.trim();
+    if (!txt && !pendingAttachment) return;
+    if (!activeId) { openSheet('modelSheet'); return; }
 
-  const c = chats.find(x => x.id === currentChatId);
-  let llmText = txt;
-  let visionDataUrl = '';
-  const activeModelObj = models.find(x => x.id === activeId);
-  const isVisionModel = activeModelObj && activeModelObj.vision;
-  const userMsg = { role: 'user', displayText: txt || 'Проанализируй вложение' };
+    let c = chats.find(x => x.id === currentChatId);
+    if (!c) { createNewChat(); c = chats[0]; }
 
-  if (pendingAttachment) {
-    if (pendingAttachment.type === 'file') {
-      userMsg.fileName = pendingAttachment.name;
-      llmText = (txt || 'Разбери содержимое файла:') + '\n\n[Файл: ' + pendingAttachment.name + ']\n' + pendingAttachment.content;
-    } else if (pendingAttachment.type === 'image') {
-      userMsg.img = pendingAttachment.dataUrl;
-      if (isVisionModel) {
-        visionDataUrl = pendingAttachment.dataUrl;
-        llmText = txt || 'Подробно опиши, что изображено на этом фото.';
-      } else {
-        llmText = (txt || 'Что на фото?') + (pendingAttachment.extracted ? '\n\n[Текст с фото]:\n' + pendingAttachment.extracted : '\n\n[Внимание: включена текстовая модель ' + activeModelObj.name + ' без Vision. Подскажи пользователю переключиться на Volt Photon v2.0 или Volt Plasma v2.5 в меню сверху.]');
+    let llmText = txt;
+    let visionDataUrl = '';
+    const activeModelObj = models.find(x => x.id === activeId);
+    const isVisionModel = activeModelObj && activeModelObj.vision;
+    const userMsg = { role: 'user', displayText: txt || 'Проанализируй вложение' };
+
+    if (pendingAttachment) {
+      if (pendingAttachment.type === 'file') {
+        userMsg.fileName = pendingAttachment.name;
+        llmText = (txt || 'Разбери содержимое файла:') + '\n\n[Файл: ' + pendingAttachment.name + ']\n' + pendingAttachment.content;
+      } else if (pendingAttachment.type === 'image') {
+        userMsg.img = pendingAttachment.dataUrl;
+        userMsg.hadImg = true;
+        if (isVisionModel) {
+          visionDataUrl = pendingAttachment.dataUrl;
+          llmText = txt || 'Подробно опиши, что изображено на этом фото.';
+        } else {
+          llmText = (txt || 'Что на фото?') + (pendingAttachment.extracted ? '\n\n[Текст с фото]:\n' + pendingAttachment.extracted : '\n\n[Внимание: включена текстовая модель ' + activeModelObj.name + ' без Vision. Подскажи пользователю переключиться на Volt Photon v2.0 или Volt Plasma v2.5 в меню сверху.]');
+        }
       }
+      clearAttachment();
     }
-    clearAttachment();
+    userMsg.llmText = llmText;
+
+    if (!c.messages.length) c.title = (txt || userMsg.fileName || 'Фото').slice(0, 32);
+    c.messages.push(userMsg);
+    saveChats();
+    renderCurrentChat();
+
+    const chatEl = document.getElementById('chat');
+    const a = document.createElement('div');
+    a.className = 'msg-a';
+    a.innerHTML = '<div class="spark">✦</div><div class="bot-wrap"><div class="bot-txt"></div>' +
+      (cfg.showStats ? '<div class="stats-bar">' + (visionDataUrl ? '👁 Обработка фото...' : 'Подготовка контекста...') + '</div>' : '') + '</div>';
+    chatEl.appendChild(a);
+    activeBotEl = a.querySelector('.bot-txt');
+    activeStatsEl = a.querySelector('.stats-bar');
+    rawStream = '';
+    approxTokens = 0;
+    genStartTs = 0;
+    lastStatsStr = '';
+
+    inp.value = '';
+    inp.style.height = 'auto';
+    setGenerating(true);
+    chatEl.scrollTop = chatEl.scrollHeight;
+
+    const recent = c.messages.slice(-6).map(m =>
+      m.role === 'user'
+        ? '<|im_start|>user\n' + m.llmText + '<|im_end|>\n'
+        : '<|im_start|>assistant\n' + m.text + '<|im_end|>\n'
+    ).join('');
+    const fullSysPrompt = buildSystemPrompt(activeModelObj);
+    VoltAndroid.sendPrompt(recent, fullSysPrompt, visionDataUrl, cfg.temp, cfg.topP, cfg.maxTokens);
+  } catch (err) {
+    setGenerating(false);
+    alert('Ошибка отправки: ' + err.message);
   }
-  userMsg.llmText = llmText;
-
-  if (!c.messages.length) c.title = (txt || userMsg.fileName || 'Фото').slice(0, 32);
-  c.messages.push(userMsg);
-  saveChats();
-  renderCurrentChat();
-
-  const chatEl = document.getElementById('chat');
-  const a = document.createElement('div');
-  a.className = 'msg-a';
-  a.innerHTML = '<div class="spark">✦</div><div class="bot-wrap"><div class="bot-txt"></div>' +
-    (cfg.showStats ? '<div class="stats-bar">' + (visionDataUrl ? '👁 Обработка фото...' : 'Подготовка контекста...') + '</div>' : '') + '</div>';
-  chatEl.appendChild(a);
-  activeBotEl = a.querySelector('.bot-txt');
-  activeStatsEl = a.querySelector('.stats-bar');
-  rawStream = '';
-  approxTokens = 0;
-  genStartTs = 0;
-  lastStatsStr = '';
-
-  inp.value = '';
-  inp.style.height = 'auto';
-  setGenerating(true);
-  chatEl.scrollTop = chatEl.scrollHeight;
-
-  const recent = c.messages.slice(-6).map(m =>
-    m.role === 'user'
-      ? '<|im_start|>user\n' + m.llmText + '<|im_end|>\n'
-      : '<|im_start|>assistant\n' + m.text + '<|im_end|>\n'
-  ).join('');
-  const fullSysPrompt = buildSystemPrompt(activeModelObj);
-  VoltAndroid.sendPrompt(recent, fullSysPrompt, visionDataUrl, cfg.temp, cfg.topP, cfg.maxTokens);
 }
 
 window.onVoltToken = (tok) => {
