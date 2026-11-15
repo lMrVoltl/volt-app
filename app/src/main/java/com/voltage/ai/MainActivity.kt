@@ -78,7 +78,7 @@ class MainActivity : AppCompatActivity() {
         .build()
 
     external fun nativeLoadModel(path: String, mmprojPath: String, threads: Int, nCtx: Int): Boolean
-    external fun nativeGenerate(prompt: String, sysPrompt: String, imgPath: String, temp: Float, topP: Float, maxTokens: Int)
+    external fun nativeGenerate(prompt: String, sysPrompt: String, rgbBytes: ByteArray?, imgW: Int, imgH: Int, temp: Float, topP: Float, maxTokens: Int)
     external fun nativeStop()
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -314,13 +314,15 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun sendPrompt(formattedHistory: String, sysPrompt: String, imgBase64: String, temp: Float, topP: Float, maxTokens: Int) {
             thread {
-                var imgPath = ""
+                var rgbBytes: ByteArray? = null
+                var w = 0
+                var h = 0
                 if (imgBase64.isNotEmpty()) {
                     try {
                         val clean = imgBase64.substringAfter(",")
                         val bytes = Base64.decode(clean, Base64.DEFAULT)
                         val rawBmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        val maxSide = 768
+                        val maxSide = 672
                         val scale = minOf(maxSide.toFloat() / rawBmp.width, maxSide.toFloat() / rawBmp.height, 1.0f)
                         val scaled = Bitmap.createScaledBitmap(
                             rawBmp,
@@ -328,14 +330,21 @@ class MainActivity : AppCompatActivity() {
                             (rawBmp.height * scale).toInt(),
                             true
                         )
-                        val tmpImg = File(cacheDir, "vision_input.jpg")
-                        FileOutputStream(tmpImg).use { out ->
-                            scaled.compress(Bitmap.CompressFormat.JPEG, 88, out)
+                        w = scaled.width
+                        h = scaled.height
+                        val pixels = IntArray(w * h)
+                        scaled.getPixels(pixels, 0, w, 0, 0, w, h)
+                        val rgb = ByteArray(w * h * 3)
+                        for (i in pixels.indices) {
+                            val px = pixels[i]
+                            rgb[i * 3] = ((px shr 16) and 0xFF).toByte()
+                            rgb[i * 3 + 1] = ((px shr 8) and 0xFF).toByte()
+                            rgb[i * 3 + 2] = (px and 0xFF).toByte()
                         }
-                        imgPath = tmpImg.absolutePath
+                        rgbBytes = rgb
                     } catch (_: Exception) {}
                 }
-                nativeGenerate(formattedHistory, sysPrompt, imgPath, temp, topP, maxTokens)
+                nativeGenerate(formattedHistory, sysPrompt, rgbBytes, w, h, temp, topP, maxTokens)
                 runOnUiThread { webView.evaluateJavascript("window.onVoltDone()", null) }
             }
         }

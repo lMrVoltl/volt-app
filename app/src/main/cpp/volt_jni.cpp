@@ -56,7 +56,8 @@ Java_com_voltage_ai_MainActivity_nativeStop(JNIEnv*, jobject) {
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_voltage_ai_MainActivity_nativeGenerate(
-    JNIEnv* env, jobject thiz, jstring jprompt, jstring jsysPrompt, jstring jimgPath,
+    JNIEnv* env, jobject thiz, jstring jprompt, jstring jsysPrompt,
+    jbyteArray jrgbBytes, jint imgW, jint imgH,
     jfloat temp, jfloat topP, jint maxTokens
 ) {
     if (!g_model || !g_ctx) return;
@@ -68,50 +69,52 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
 
     const char* raw = env->GetStringUTFChars(jprompt, nullptr);
     const char* sysRaw = env->GetStringUTFChars(jsysPrompt, nullptr);
-    const char* imgRaw = jimgPath ? env->GetStringUTFChars(jimgPath, nullptr) : nullptr;
 
     std::string sysStr = (sysRaw && sysRaw[0] != '\0')
         ? std::string(sysRaw)
         : "Ты локальный ассистент Volt AI.";
     std::string userHistory(raw);
-    std::string imgPath = imgRaw ? std::string(imgRaw) : "";
 
     env->ReleaseStringUTFChars(jprompt, raw);
     env->ReleaseStringUTFChars(jsysPrompt, sysRaw);
-    if (jimgPath && imgRaw) env->ReleaseStringUTFChars(jimgPath, imgRaw);
 
     const llama_vocab* vocab = llama_model_get_vocab(g_model);
     auto t_start = std::chrono::steady_clock::now();
     llama_memory_clear(llama_get_memory(g_ctx), true);
 
     bool usedVision = false;
-    if (g_mtmd != nullptr && !imgPath.empty()) {
-        mtmd_bitmap* bmp = mtmd_helper_bitmap_init_from_file(g_mtmd, imgPath.c_str());
-        if (bmp != nullptr) {
-            std::string marker = mtmd_default_marker();
-            size_t pos = userHistory.rfind("<|im_start|>user\n");
-            if (pos != std::string::npos) {
-                userHistory.insert(pos + 17, marker + "\n");
-            } else {
-                userHistory = marker + "\n" + userHistory;
-            }
-            std::string fullPrompt = "<|im_start|>system\n" + sysStr + "<|im_end|>\n" + userHistory + "<|im_start|>assistant\n";
+    if (g_mtmd != nullptr && jrgbBytes != nullptr && imgW > 0 && imgH > 0) {
+        jbyte* rgbPtr = env->GetByteArrayElements(jrgbBytes, nullptr);
+        if (rgbPtr != nullptr) {
+            mtmd_bitmap* bmp = mtmd_bitmap_init((uint32_t)imgW, (uint32_t)imgH, (const unsigned char*)rgbPtr);
+            env->ReleaseByteArrayElements(jrgbBytes, rgbPtr, JNI_ABORT);
 
-            mtmd_input_chunks* chunks = mtmd_input_chunks_init();
-            mtmd_input_text itxt;
-            itxt.text = fullPrompt.c_str();
-            itxt.add_special = true;
-            itxt.parse_special = true;
-
-            const mtmd_bitmap* bmps[1] = { bmp };
-            if (mtmd_tokenize(g_mtmd, chunks, &itxt, bmps, 1) == 0) {
-                llama_pos new_n_past = 0;
-                if (mtmd_helper_eval_chunks(g_mtmd, g_ctx, chunks, 0, 0, 512, true, &new_n_past) == 0) {
-                    usedVision = true;
+            if (bmp != nullptr) {
+                std::string marker = mtmd_default_marker();
+                size_t pos = userHistory.rfind("<|im_start|>user\n");
+                if (pos != std::string::npos) {
+                    userHistory.insert(pos + 17, marker + "\n");
+                } else {
+                    userHistory = marker + "\n" + userHistory;
                 }
+                std::string fullPrompt = "<|im_start|>system\n" + sysStr + "<|im_end|>\n" + userHistory + "<|im_start|>assistant\n";
+
+                mtmd_input_chunks* chunks = mtmd_input_chunks_init();
+                mtmd_input_text itxt;
+                itxt.text = fullPrompt.c_str();
+                itxt.add_special = true;
+                itxt.parse_special = true;
+
+                const mtmd_bitmap* bmps[1] = { bmp };
+                if (mtmd_tokenize(g_mtmd, chunks, &itxt, bmps, 1) == 0) {
+                    llama_pos new_n_past = 0;
+                    if (mtmd_helper_eval_chunks(g_mtmd, g_ctx, chunks, 0, 0, 512, true, &new_n_past) == 0) {
+                        usedVision = true;
+                    }
+                }
+                mtmd_input_chunks_free(chunks);
+                mtmd_bitmap_free(bmp);
             }
-            mtmd_input_chunks_free(chunks);
-            mtmd_bitmap_free(bmp);
         }
     }
 
