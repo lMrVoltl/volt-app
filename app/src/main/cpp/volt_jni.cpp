@@ -4,6 +4,8 @@
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <cmath>
+#include <algorithm>
 #include "llama.h"
 #include "mtmd.h"
 #include "mtmd-helper.h"
@@ -21,6 +23,57 @@ static void volt_mtmd_log_cb(enum ggml_log_level level, const char* text, void*)
             g_lastMtmdErr.pop_back();
         }
     }
+}
+
+// Проверка завершенности UTF-8 последовательности, чтобы NewStringUTF не падал на разорванных русских буквах
+static size_t valid_utf8_prefix_len(const std::string& s) {
+    size_t i = 0;
+    size_t n = s.size();
+    while (i < n) {
+        unsigned char c = static_cast<unsigned char>(s[i]);
+        size_t charLen = 0;
+        if (c < 0x80) charLen = 1;
+        else if ((c & 0xE0) == 0xC0) charLen = 2;
+        else if ((c & 0xF0) == 0xE0) charLen = 3;
+        else if ((c & 0xF8) == 0xF0) charLen = 4;
+        else {
+            i++;
+            continue;
+        }
+        if (i + charLen > n) {
+            break;
+        }
+        i += charLen;
+    }
+    return i;
+}
+
+// Поиск ID токенов для подавления боксов (<|box_start|>, <|object_ref_start|>, <|quad_start|>) и <|im_start|>
+static std::vector<llama_token> collect_banned_vision_tokens(const llama_vocab* vocab) {
+    std::vector<llama_token> banned_ids;
+    const char* banned_tokens[] = {
+        "<|box_start|>",
+        "<|box_end|>",
+        "<|object_ref_start|>",
+        "<|object_ref_end|>",
+        "<|quad_start|>",
+        "<|quad_end|>",
+        "<|im_start|>",
+        "<|vision_start|>",
+        "<|vision_end|>"
+    };
+    int32_t n_vocab = llama_vocab_n_tokens(vocab);
+    for (int32_t id = 0; id < n_vocab; id++) {
+        const char* txt = llama_vocab_get_text(vocab, id);
+        if (!txt) continue;
+        for (const char* banned : banned_tokens) {
+            if (std::strcmp(txt, banned) == 0) {
+                banned_ids.push_back(id);
+                break;
+            }
+        }
+    }
+    return banned_ids;
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
@@ -116,29 +169,37 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
                     visionState = -3;
                 } else {
                     g_lastMtmdErr.clear();
-                    std::string prefix = "<|im_start|>system\n" + sysStr + "<|im_end|>\n";
-                    std::string suffix = userHistory + "<|im_start|>assistant\n";
+                    const char* marker = mtmd_default_marker();
 
+                    std::string fullPrompt;
                     size_t pos = userHistory.rfind("<|im_start|>user\n");
                     if (pos != std::string::npos) {
-                        prefix += userHistory.substr(0, pos + 17);
-                        suffix = "\n" + userHistory.substr(pos + 17) + "<|im_start|>assistant\n";
+                        std::string beforeUser = userHistory.substr(0, pos + 17);
+                        std::string userContent = userHistory.substr(pos + 17);
+                        fullPrompt = "<|im_start|>system\n" + sysStr + "<|im_end|>\n"
+                                   + beforeUser + std::string(marker) + "\n" + userContent
+                                   + "<|im_start|>assistant\n";
+                    } else {
+                        fullPrompt = "<|im_start|>system\n" + sysStr + "<|im_end|>\n"
+                                   + "<|im_start|>user\n" + std::string(marker) + "\n" + userHistory + "<|im_end|>\n"
+                                   + "<|im_start|>assistant\n";
                     }
 
                     mtmd_input_chunks* chunks = mtmd_input_chunks_init();
-                    mtmd_input_text t0 = { prefix.c_str(), true, true };
-                    mtmd_input_text t2 = { suffix.c_str(), false, true };
-                    mtmd_input_part p0 = { &t0, nullptr };
-                    mtmd_input_part p1 = { nullptr, bmp };
-                    mtmd_input_part p2 = { &t2, nullptr };
-                    const mtmd_input_part* partsArr[3] = { &p0, &p1, &p2 };
+                    mtmd_input_text textInput;
+                    textInput.text = fullPrompt.c_str();
+                    textInput.add_special = true;
+                    textInput.parse_special = true;
 
-                    int tokRes = mtmd_tokenize_from_parts(g_mtmd, chunks, partsArr, 3, true);
+                    const mtmd_bitmap* bitmaps[1] = { bmp };
+                    int tokRes = mtmd_tokenize(g_mtmd, chunks, &textInput, bitmaps, 1);
+
                     if (tokRes != 0) {
                         visionState = -10 - tokRes;
                     } else {
                         llama_pos new_n_past = 0;
-                        int evalRes = mtmd_helper_eval_chunks(g_mtmd, g_ctx, chunks, 0, 0, 2048, true, &new_n_past);
+                        int32_t n_batch = (int32_t)llama_n_batch(g_ctx);
+                        int evalRes = mtmd_helper_eval_chunks(g_mtmd, g_ctx, chunks, 0, 0, n_batch, true, &new_n_past);
                         if (evalRes != 0) {
                             visionState = -20 - evalRes;
                         } else {
@@ -155,7 +216,13 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
 
     if (visionState != 1) {
         llama_memory_clear(llama_get_memory(g_ctx), true);
-        std::string prompt = "<|im_start|>system\n" + sysStr + "<|im_end|>\n" + userHistory + "<|im_start|>assistant\n";
+        std::string prompt;
+        if (userHistory.find("<|im_start|>") != std::string::npos) {
+            prompt = "<|im_start|>system\n" + sysStr + "<|im_end|>\n" + userHistory + "<|im_start|>assistant\n";
+        } else {
+            prompt = "<|im_start|>system\n" + sysStr + "<|im_end|>\n<|im_start|>user\n" + userHistory + "<|im_end|>\n<|im_start|>assistant\n";
+        }
+
         std::vector<llama_token> tokens(prompt.size() + 32);
         int n_tokens = llama_tokenize(vocab, prompt.c_str(), prompt.size(), tokens.data(), tokens.size(), true, true);
         if (n_tokens < 0) return;
@@ -179,36 +246,62 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
     auto t_gen_start = std::chrono::steady_clock::now();
     auto sparams = llama_sampler_chain_default_params();
     llama_sampler* smpl = llama_sampler_chain_init(sparams);
-    llama_sampler_chain_add(smpl, llama_sampler_init_penalties(64, 1.15f, 0.0f, 0.0f));
     llama_sampler_chain_add(smpl, llama_sampler_init_top_k(40));
     llama_sampler_chain_add(smpl, llama_sampler_init_top_p(topP, 1));
     llama_sampler_chain_add(smpl, llama_sampler_init_temp(temp));
     llama_sampler_chain_add(smpl, llama_sampler_init_dist(42));
 
+    auto banned_ids = collect_banned_vision_tokens(vocab);
+    int32_t n_vocab = llama_vocab_n_tokens(vocab);
+    std::vector<llama_token> recent_tokens;
+    recent_tokens.reserve(64);
+    const float repeat_penalty = 1.15f;
+
     int generated = 0;
     int limit = maxTokens > 0 ? maxTokens : 1024;
     bool hasPrintedVisible = false;
-    bool inBoxTag = false;
+    std::string utf8Pending;
 
     llama_batch stepBatch = llama_batch_init(1, 0, 1);
 
     for (int i = 0; i < limit && !g_stop; i++) {
+        float* logits = llama_get_logits_ith(g_ctx, -1);
+        if (logits != nullptr) {
+            for (llama_token bid : banned_ids) {
+                if (bid >= 0 && bid < n_vocab) {
+                    logits[bid] = -INFINITY;
+                }
+            }
+            for (llama_token rtok : recent_tokens) {
+                if (rtok >= 0 && rtok < n_vocab) {
+                    if (logits[rtok] > 0.0f) logits[rtok] /= repeat_penalty;
+                    else logits[rtok] *= repeat_penalty;
+                }
+            }
+        }
+
         llama_token id = llama_sampler_sample(smpl, g_ctx, -1);
         if (llama_vocab_is_eog(vocab, id)) break;
         llama_sampler_accept(smpl, id);
 
+        if (recent_tokens.size() >= 64) {
+            recent_tokens.erase(recent_tokens.begin());
+        }
+        recent_tokens.push_back(id);
+
         char buf[256];
-        int n = llama_token_to_piece(vocab, id, buf, sizeof(buf), 0, true);
+        int n = llama_token_to_piece(vocab, id, buf, sizeof(buf), 0, false);
         if (n > 0) {
-            std::string piece(buf, n);
+            utf8Pending.append(buf, n);
+            size_t validLen = valid_utf8_prefix_len(utf8Pending);
+            if (validLen > 0) {
+                std::string piece = utf8Pending.substr(0, validLen);
+                utf8Pending.erase(0, validLen);
 
-            if (piece.find("<|im_end|>") != std::string::npos || piece.find("<|endoftext|>") != std::string::npos) {
-                break;
-            }
-            if (piece.find("<|box_start|>") != std::string::npos) { inBoxTag = true; }
-            if (piece.find("<|box_end|>") != std::string::npos) { inBoxTag = false; piece.clear(); }
+                if (piece.find("<|im_end|>") != std::string::npos || piece.find("<|endoftext|>") != std::string::npos) {
+                    break;
+                }
 
-            if (!inBoxTag && piece.find("<|") == std::string::npos) {
                 if (!hasPrintedVisible) {
                     size_t firstChar = piece.find_first_not_of(" \n\r\t");
                     if (firstChar == std::string::npos) {
@@ -218,6 +311,7 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
                         hasPrintedVisible = true;
                     }
                 }
+
                 if (!piece.empty()) {
                     generated++;
                     jstring jpiece = env->NewStringUTF(piece.c_str());
