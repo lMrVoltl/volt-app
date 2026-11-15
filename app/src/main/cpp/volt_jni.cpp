@@ -53,7 +53,6 @@ Java_com_voltage_ai_MainActivity_nativeLoadModel(
         const char* mmpath = env->GetStringUTFChars(jmmproj, nullptr);
         if (mmpath && mmpath[0] != '\0') {
             auto mctx_params = mtmd_context_params_default();
-            mctx_params.media_marker = "<__media__>";
             mctx_params.use_gpu = false;
             mctx_params.n_threads = threads;
             g_mtmd = mtmd_init_from_file(mmpath, g_model, mctx_params);
@@ -113,24 +112,22 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
                     visionState = -3;
                 } else {
                     g_lastMtmdErr.clear();
-                    std::string visionHistory = userHistory;
-                    std::string marker = "<__media__>";
-                    size_t pos = visionHistory.rfind("<|im_start|>user\n");
+                    std::string prefix = "<|im_start|>system\n" + sysStr + "<|im_end|>\n";
+                    std::string suffix = userHistory + "<|im_start|>assistant\n";
+
+                    size_t pos = userHistory.rfind("<|im_start|>user\n");
                     if (pos != std::string::npos) {
-                        visionHistory.insert(pos + 17, marker + "\n");
-                    } else {
-                        visionHistory = marker + "\n" + visionHistory;
+                        prefix += userHistory.substr(0, pos + 17);
+                        suffix = "\n" + userHistory.substr(pos + 17) + "<|im_start|>assistant\n";
                     }
-                    std::string fullPrompt = "<|im_start|>system\n" + sysStr + "<|im_end|>\n" + visionHistory + "<|im_start|>assistant\n";
 
                     mtmd_input_chunks* chunks = mtmd_input_chunks_init();
-                    mtmd_input_text itxt;
-                    itxt.text = fullPrompt.c_str();
-                    itxt.add_special = true;
-                    itxt.parse_special = true;
+                    mtmd_input_part p0 = { prefix.c_str(), nullptr, true };
+                    mtmd_input_part p1 = { "", bmp, false };
+                    mtmd_input_part p2 = { suffix.c_str(), nullptr, true };
+                    const mtmd_input_part* partsArr[3] = { &p0, &p1, &p2 };
 
-                    const mtmd_bitmap* bmps[1] = { bmp };
-                    int tokRes = mtmd_tokenize(g_mtmd, chunks, &itxt, bmps, 1);
+                    int tokRes = mtmd_tokenize_from_parts(g_mtmd, chunks, partsArr, 3, true);
                     if (tokRes != 0) {
                         visionState = -10 - tokRes;
                     } else {
