@@ -322,7 +322,7 @@ class MainActivity : AppCompatActivity() {
                         val clean = imgBase64.substringAfter(",")
                         val bytes = Base64.decode(clean, Base64.DEFAULT)
                         val rawBmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        val maxSide = 672
+                        val maxSide = 448
                         val scale = minOf(maxSide.toFloat() / rawBmp.width, maxSide.toFloat() / rawBmp.height, 1.0f)
                         val scaled = Bitmap.createScaledBitmap(
                             rawBmp,

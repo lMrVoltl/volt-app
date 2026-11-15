@@ -196,14 +196,14 @@ let currentChatId = null, pendingAttachment = null;
 function buildSystemPrompt(modelObj) {
   if (!modelObj) return cfg.sysPrompt;
   const visionCap = modelObj.vision
-    ? 'Ты обладаешь встроенным компьютерным зрением (Vision) и умеешь анализировать фотографии, изображения, графики и документы.'
-    : 'Ты текстовая модель без модуля компьютерного зрения (работаешь с текстом, кодом и текстовыми документами).';
+    ? 'У тебя есть встроенное зрение (Vision): ты напрямую видишь прикреплённые изображения и подробно описываешь всё, что на них изображено.'
+    : 'Ты текстовая модель без зрения (работаешь только с текстом и файлами).';
   const baseInfo = modelObj.base_model ? modelObj.base_model : modelObj.params;
   const tierInfo = modelObj.tier ? modelObj.tier : modelObj.params;
-  return 'Идентификация: Ты — ' + modelObj.name + ' (' + tierInfo + '), локальная нейросеть из линейки Volt AI от бренда VOLTAGE, работающая полностью офлайн на смартфоне пользователя. ' +
-    'Техническая база: ты построена на основе модели ' + baseInfo + '. ' + visionCap + ' ' +
-    'Когда пользователь спрашивает, кто ты, какая ты модель или на какой базе работаешь, обязательно называй своё полное имя (' + modelObj.name + '), класс (' + tierInfo + ') и базовую модель (' + baseInfo + '). ' +
-    'Стиль общения: ' + cfg.sysPrompt;
+  return 'Ты — ' + modelObj.name + ' (' + tierInfo + ', база: ' + baseInfo + ') от бренда VOLTAGE. ' + visionCap + ' ' +
+    'Отвечай прямо на вопрос пользователя. НЕ рассказывай о себе и своей модели, ЕСЛИ пользователь сам не спросил «кто ты», «какая ты модель» или «на чём ты работаешь». ' +
+    'Если же спросили о тебе — назови имя (' + modelObj.name + '), класс (' + tierInfo + ') и базовую модель (' + baseInfo + '). ' +
+    'Стиль: ' + cfg.sysPrompt;
 }
 
 function saveChats(){ localStorage.setItem('volt_chats', JSON.stringify(chats)); }
