@@ -15,7 +15,6 @@ static llama_context* g_ctx = nullptr;
 static mtmd_context* g_mtmd = nullptr;
 static std::atomic<bool> g_stop{false};
 static std::string g_lastMtmdErr;
-static const char* VOLT_MEDIA_MARKER = "<__media__>";
 
 static void volt_mtmd_log_cb(enum ggml_log_level level, const char* text, void*) {
     if (level == GGML_LOG_LEVEL_ERROR && text != nullptr) {
@@ -108,7 +107,6 @@ Java_com_voltage_ai_MainActivity_nativeLoadModel(
             auto mctx_params = mtmd_context_params_default();
             mctx_params.use_gpu = false;
             mctx_params.n_threads = threads;
-            mctx_params.media_marker = VOLT_MEDIA_MARKER;
             g_mtmd = mtmd_init_from_file(mmpath, g_model, mctx_params);
         }
         env->ReleaseStringUTFChars(jmmproj, mmpath);
@@ -170,29 +168,27 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
                 } else {
                     g_lastMtmdErr.clear();
 
-                    std::string fullPrompt;
+                    std::string prefix = "<|im_start|>system\n" + sysStr + "<|im_end|>\n";
+                    std::string suffix;
+
                     size_t pos = userHistory.rfind("<|im_start|>user\n");
                     if (pos != std::string::npos) {
-                        std::string beforeUser = userHistory.substr(0, pos + 17);
-                        std::string userContent = userHistory.substr(pos + 17);
-                        fullPrompt = "<|im_start|>system\n" + sysStr + "<|im_end|>\n"
-                                   + beforeUser + std::string(VOLT_MEDIA_MARKER) + "\n" + userContent
-                                   + "<|im_start|>assistant\n";
+                        prefix += userHistory.substr(0, pos + 17);
+                        suffix = "\n" + userHistory.substr(pos + 17) + "<|im_start|>assistant\n";
                     } else {
-                        fullPrompt = "<|im_start|>system\n" + sysStr + "<|im_end|>\n"
-                                   + "<|im_start|>user\n" + std::string(VOLT_MEDIA_MARKER) + "\n" + userHistory + "<|im_end|>\n"
-                                   + "<|im_start|>assistant\n";
+                        prefix += "<|im_start|>user\n";
+                        suffix = "\n" + userHistory + "<|im_end|>\n<|im_start|>assistant\n";
                     }
 
                     mtmd_input_chunks* chunks = mtmd_input_chunks_init();
-                    mtmd_input_text textInput;
-                    textInput.text = fullPrompt.c_str();
-                    textInput.add_special = true;
-                    textInput.parse_special = true;
+                    mtmd_input_text t0 = { prefix.c_str(), true, true };
+                    mtmd_input_text t2 = { suffix.c_str(), false, true };
+                    mtmd_input_part p0 = { &t0, nullptr };
+                    mtmd_input_part p1 = { nullptr, bmp };
+                    mtmd_input_part p2 = { &t2, nullptr };
+                    const mtmd_input_part* partsArr[3] = { &p0, &p1, &p2 };
 
-                    const mtmd_bitmap* bitmaps[1] = { bmp };
-                    int tokRes = mtmd_tokenize(g_mtmd, chunks, &textInput, bitmaps, 1);
-
+                    int tokRes = mtmd_tokenize_from_parts(g_mtmd, chunks, partsArr, 3, true);
                     if (tokRes != 0) {
                         visionState = -10 - tokRes;
                     } else {
