@@ -3,6 +3,7 @@
 #include <vector>
 #include <atomic>
 #include <chrono>
+#include <cstring>
 #include "llama.h"
 #include "mtmd.h"
 #include "mtmd-helper.h"
@@ -79,6 +80,7 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
     jclass cls = env->GetObjectClass(thiz);
     jmethodID onToken = env->GetMethodID(cls, "onNativeToken", "(Ljava/lang/String;)V");
     jmethodID onStats = env->GetMethodID(cls, "onNativeStats", "(IDDILjava/lang/String;)V");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
 
     const char* raw = env->GetStringUTFChars(jprompt, nullptr);
     const char* sysRaw = env->GetStringUTFChars(jsysPrompt, nullptr);
@@ -86,16 +88,18 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
     std::string sysStr = (sysRaw && sysRaw[0] != '\0')
         ? std::string(sysRaw)
         : "Ты локальный ассистент Volt AI.";
-    std::string userHistory(raw);
+    std::string userHistory(raw ? raw : "");
 
-    env->ReleaseStringUTFChars(jprompt, raw);
-    env->ReleaseStringUTFChars(jsysPrompt, sysRaw);
+    if (raw) env->ReleaseStringUTFChars(jprompt, raw);
+    if (sysRaw) env->ReleaseStringUTFChars(jsysPrompt, sysRaw);
 
     const llama_vocab* vocab = llama_model_get_vocab(g_model);
     auto t_start = std::chrono::steady_clock::now();
     llama_memory_clear(llama_get_memory(g_ctx), true);
 
     int visionState = 0;
+    llama_pos n_past = 0;
+
     if (jrgbBytes != nullptr && imgW > 0 && imgH > 0) {
         if (g_mtmd == nullptr) {
             visionState = -1;
@@ -139,6 +143,7 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
                             visionState = -20 - evalRes;
                         } else {
                             visionState = 1;
+                            n_past = new_n_past;
                         }
                     }
                     mtmd_input_chunks_free(chunks);
@@ -149,17 +154,32 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
     }
 
     if (visionState != 1) {
+        llama_memory_clear(llama_get_memory(g_ctx), true);
         std::string prompt = "<|im_start|>system\n" + sysStr + "<|im_end|>\n" + userHistory + "<|im_start|>assistant\n";
         std::vector<llama_token> tokens(prompt.size() + 32);
         int n_tokens = llama_tokenize(vocab, prompt.c_str(), prompt.size(), tokens.data(), tokens.size(), true, true);
         if (n_tokens < 0) return;
         tokens.resize(n_tokens);
-        if (llama_decode(g_ctx, llama_batch_get_one(tokens.data(), tokens.size())) != 0) return;
+
+        llama_batch batch = llama_batch_init(tokens.size(), 0, 1);
+        batch.n_tokens = tokens.size();
+        for (size_t i = 0; i < tokens.size(); i++) {
+            batch.token[i] = tokens[i];
+            batch.pos[i] = i;
+            batch.n_seq_id[i] = 1;
+            batch.seq_id[i][0] = 0;
+            batch.logits[i] = (i == tokens.size() - 1);
+        }
+        int decRes = llama_decode(g_ctx, batch);
+        llama_batch_free(batch);
+        if (decRes != 0) return;
+        n_past = (llama_pos)tokens.size();
     }
 
     auto t_gen_start = std::chrono::steady_clock::now();
     auto sparams = llama_sampler_chain_default_params();
     llama_sampler* smpl = llama_sampler_chain_init(sparams);
+    llama_sampler_chain_add(smpl, llama_sampler_init_penalties(64, 1.15f, 0.0f, 0.0f));
     llama_sampler_chain_add(smpl, llama_sampler_init_top_k(40));
     llama_sampler_chain_add(smpl, llama_sampler_init_top_p(topP, 1));
     llama_sampler_chain_add(smpl, llama_sampler_init_temp(temp));
@@ -167,35 +187,57 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
 
     int generated = 0;
     int limit = maxTokens > 0 ? maxTokens : 1024;
-    llama_token prev_id = -1;
-    int same_tok_count = 0;
+    bool hasPrintedVisible = false;
+    bool inBoxTag = false;
+
+    llama_batch stepBatch = llama_batch_init(1, 0, 1);
 
     for (int i = 0; i < limit && !g_stop; i++) {
         llama_token id = llama_sampler_sample(smpl, g_ctx, -1);
         if (llama_vocab_is_eog(vocab, id)) break;
-
-        if (id == prev_id) {
-            same_tok_count++;
-            if (same_tok_count >= 4) break;
-        } else {
-            same_tok_count = 0;
-            prev_id = id;
-        }
+        llama_sampler_accept(smpl, id);
 
         char buf[256];
-        // special = false скрывает служебные токены <|im_start|>, <|box_start|> и <|object_ref_start|>
-        int n = llama_token_to_piece(vocab, id, buf, sizeof(buf), 0, false);
+        int n = llama_token_to_piece(vocab, id, buf, sizeof(buf), 0, true);
         if (n > 0) {
             std::string piece(buf, n);
-            if (piece.find("<|") == std::string::npos) {
-                generated++;
-                jstring jpiece = env->NewStringUTF(piece.c_str());
-                env->CallVoidMethod(thiz, onToken, jpiece);
-                env->DeleteLocalRef(jpiece);
+
+            if (piece.find("<|im_end|>") != std::string::npos || piece.find("<|endoftext|>") != std::string::npos) {
+                break;
+            }
+            if (piece.find("<|box_start|>") != std::string::npos) { inBoxTag = true; }
+            if (piece.find("<|box_end|>") != std::string::npos) { inBoxTag = false; piece.clear(); }
+
+            if (!inBoxTag && piece.find("<|") == std::string::npos) {
+                if (!hasPrintedVisible) {
+                    size_t firstChar = piece.find_first_not_of(" \n\r\t");
+                    if (firstChar == std::string::npos) {
+                        piece.clear();
+                    } else {
+                        piece = piece.substr(firstChar);
+                        hasPrintedVisible = true;
+                    }
+                }
+                if (!piece.empty()) {
+                    generated++;
+                    jstring jpiece = env->NewStringUTF(piece.c_str());
+                    env->CallVoidMethod(thiz, onToken, jpiece);
+                    env->DeleteLocalRef(jpiece);
+                }
             }
         }
-        if (llama_decode(g_ctx, llama_batch_get_one(&id, 1)) != 0) break;
+
+        stepBatch.n_tokens = 1;
+        stepBatch.token[0] = id;
+        stepBatch.pos[0] = n_past++;
+        stepBatch.n_seq_id[0] = 1;
+        stepBatch.seq_id[0][0] = 0;
+        stepBatch.logits[0] = true;
+
+        if (llama_decode(g_ctx, stepBatch) != 0) break;
     }
+
+    llama_batch_free(stepBatch);
 
     auto t_end = std::chrono::steady_clock::now();
     double gen_sec = std::chrono::duration<double>(t_end - t_gen_start).count();
