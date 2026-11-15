@@ -53,6 +53,7 @@ Java_com_voltage_ai_MainActivity_nativeLoadModel(
         const char* mmpath = env->GetStringUTFChars(jmmproj, nullptr);
         if (mmpath && mmpath[0] != '\0') {
             auto mctx_params = mtmd_context_params_default();
+            mctx_params.media_marker = "<__media__>";
             mctx_params.use_gpu = false;
             mctx_params.n_threads = threads;
             g_mtmd = mtmd_init_from_file(mmpath, g_model, mctx_params);
@@ -113,7 +114,7 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
                 } else {
                     g_lastMtmdErr.clear();
                     std::string visionHistory = userHistory;
-                    std::string marker = mtmd_default_marker();
+                    std::string marker = "<__media__>";
                     size_t pos = visionHistory.rfind("<|im_start|>user\n");
                     if (pos != std::string::npos) {
                         visionHistory.insert(pos + 17, marker + "\n");
