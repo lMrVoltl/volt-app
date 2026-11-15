@@ -13,9 +13,9 @@ set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(llama.cpp)
 
-file(GLOB MTMD_SRCS "llama.cpp/tools/mtmd/*.cpp")
-list(FILTER MTMD_SRCS EXCLUDE REGEX ".*cli.*")
+file(GLOB_RECURSE MTMD_SRCS "llama.cpp/tools/mtmd/*.cpp")
+list(FILTER MTMD_SRCS EXCLUDE REGEX ".*(cli|test).*")
 
 add_library(volt_jni SHARED volt_jni.cpp ${MTMD_SRCS})
-target_include_directories(volt_jni PRIVATE llama.cpp/tools/mtmd llama.cpp/vendor)
+target_include_directories(volt_jni PRIVATE llama.cpp/tools/mtmd llama.cpp/tools/mtmd/models llama.cpp/vendor)
 target_link_libraries(volt_jni llama android log)
