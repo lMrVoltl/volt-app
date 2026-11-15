@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Volt AI</title>
 <style>
-  :root{--bg:#131314;--surf:#1e1f20;--surf2:#282a2c;--txt:#e3e3e3;--sub:#9aa0a6;--acc:#a8c7fa;--accTxt:#062e6f;--ok:#81c995}
+  :root{--bg:#131314;--surf:#1e1f20;--surf2:#282a2c;--txt:#e3e3e3;--sub:#9aa0a6;--acc:#a8c7fa;--accTxt:#062e6f;--ok:#81c995;--warn:#f28b82}
   *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,system-ui,sans-serif}
   body{background:var(--bg);color:var(--txt);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
   header{height:56px;padding:0 10px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:6px}
@@ -22,8 +22,10 @@
   .spark{width:26px;height:26px;border-radius:13px;background:var(--surf2);display:grid;place-items:center;flex-shrink:0;color:var(--acc);margin-top:2px}
   .bot-wrap{flex:1;min-width:0}
   .bot-txt{word-break:break-word}
-  .stats-bar{margin-top:8px;display:inline-flex;align-items:center;gap:8px;background:var(--surf);border:1px solid rgba(255,255,255,.06);padding:4px 10px;border-radius:12px;font-size:11.5px;color:var(--sub);font-variant-numeric:tabular-nums}
+  .stats-bar{margin-top:8px;display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--surf);border:1px solid rgba(255,255,255,.06);padding:4px 10px;border-radius:12px;font-size:11.5px;color:var(--sub);font-variant-numeric:tabular-nums}
   .stats-bar b{color:var(--ok);font-weight:600}
+  .stats-bar .v-ok{color:var(--acc);font-weight:600}
+  .stats-bar .v-err{color:var(--warn);font-weight:600}
   .bot-txt pre{background:#0d0d0e;padding:12px;border-radius:12px;overflow-x:auto;margin:8px 0;font-family:monospace;font-size:13px;position:relative}
   .bot-txt code{font-family:monospace;background:var(--surf2);padding:2px 5px;border-radius:5px;font-size:13px}
   .bot-txt pre code{background:transparent;padding:0}
@@ -44,10 +46,12 @@
   .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:flex-end;z-index:25}
   .sheet-bg.open{display:flex}
   .sheet{background:var(--surf);width:100%;border-radius:28px 28px 0 0;padding:20px 16px 32px;max-height:88dvh;overflow-y:auto}
-  .card{background:var(--surf2);border-radius:20px;padding:14px;margin-top:12px}
+  .card{background:var(--surf2);border-radius:20px;padding:15px;margin-top:12px}
+  .grp-head{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--acc);margin-bottom:2px}
+  .grp-sub{font-size:12px;color:var(--sub);margin-bottom:6px}
   .badge{display:inline-block;font-size:11px;padding:3px 9px;border-radius:12px;background:rgba(129,201,149,.18);color:var(--ok);margin-bottom:6px}
-  .btn{width:100%;margin-top:10px;padding:11px;border-radius:14px;border:none;background:var(--acc);color:var(--accTxt);font-weight:600;font-size:14px}
-  .btn.sec{background:var(--surf);color:var(--txt)}
+  .btn{width:100%;margin-top:12px;padding:12px;border-radius:14px;border:none;background:var(--acc);color:var(--accTxt);font-weight:600;font-size:14px}
+  .btn.sec{background:var(--surf2);color:var(--txt);border:1px solid rgba(255,255,255,.08)}
   .os-hero{background:linear-gradient(135deg,#1d293e 0%,#261e38 55%,#1b232e 100%);border:1px solid rgba(168,199,250,.22);border-radius:24px;padding:18px;margin-top:12px;position:relative;overflow:hidden}
   .os-tag{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--acc);font-weight:600}
   .os-soc{font-size:20px;font-weight:700;color:#fff;margin-top:4px;line-height:1.25}
@@ -60,8 +64,9 @@
   .sup-row:last-child{border-bottom:none}
   .set-row{margin-top:14px}
   .set-head{display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:6px}
+  .set-hint{font-size:11.5px;color:var(--sub);margin-top:3px}
   input[type=range]{width:100%;accent-color:var(--acc)}
-  select,textarea.sys-inp{width:100%;background:var(--surf2);color:var(--txt);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px 12px;font-size:14px;outline:none}
+  select,textarea.sys-inp{width:100%;background:var(--surf);color:var(--txt);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px 12px;font-size:14px;outline:none}
 </style>
 </head>
 <body>
@@ -129,6 +134,7 @@
       <button onclick="closeSheets()" style="background:none;border:none;color:var(--sub);font-size:18px">✕</button>
     </div>
 
+    <!-- Группа 1: Оборудование (OriginOS / HyperOS Card) -->
     <div class="os-hero" id="hwCard">
       <div class="os-tag">VOLTAGE ENGINE • ОБОРУДОВАНИЕ</div>
       <div class="os-soc" id="hwSoc">Определение чипа...</div>
@@ -138,53 +144,81 @@
         <div class="bento-box"><div class="bento-lbl">Оперативная память</div><div class="bento-val" id="hwRam">—</div></div>
         <div class="bento-box" style="grid-column:span 2"><div class="bento-lbl">Инструкции ускорения AI</div><div class="bento-val" id="hwSimd">—</div></div>
       </div>
-      <div style="margin-top:14px;font-size:12px;color:#b8c4d9;font-weight:600">Поддерживаемые модели</div>
+      <div style="margin-top:14px;font-size:12px;color:#b8c4d9;font-weight:600">Совместимость моделей</div>
       <div id="hwSupported" style="margin-top:4px"></div>
     </div>
 
+    <!-- Группа 2: Генерация и ответы -->
     <div class="card">
-      <b>Параметры генерации</b>
+      <div class="grp-head">✦ Генерация и точность</div>
+      <div class="grp-sub">Управление логикой, креативностью и объёмом ответа</div>
+
       <div class="set-row">
-        <div class="set-head"><span>Температура (креативность)</span><b id="valTemp">0.6</b></div>
+        <div class="set-head"><span>Температура</span><b id="valTemp">0.6</b></div>
         <input type="range" id="setTemp" min="0.1" max="1.5" step="0.1" oninput="document.getElementById('valTemp').innerText=this.value">
+        <div class="set-hint">Ниже — точнее код и факты; выше — живее текст</div>
       </div>
+
       <div class="set-row">
-        <div class="set-head"><span>Top-P (разнообразие слов)</span><b id="valTopP">0.9</b></div>
+        <div class="set-head"><span>Top-P (ширина словаря)</span><b id="valTopP">0.9</b></div>
         <input type="range" id="setTopP" min="0.1" max="1.0" step="0.05" oninput="document.getElementById('valTopP').innerText=this.value">
       </div>
+
       <div class="set-row">
-        <div class="set-head"><span>Макс. длина ответа (токенов)</span><b id="valMax">1024</b></div>
-        <input type="range" id="setMax" min="256" max="2048" step="128" oninput="document.getElementById('valMax').innerText=this.value">
+        <div class="set-head"><span>Лимит длины ответа</span><b id="valMax">1024 ток.</b></div>
+        <input type="range" id="setMax" min="256" max="2048" step="128" oninput="document.getElementById('valMax').innerText=this.value+' ток.'">
       </div>
+    </div>
+
+    <!-- Группа 3: Производительность и память -->
+    <div class="card">
+      <div class="grp-head">⚡ Производительность и память</div>
+      <div class="grp-sub">Баланс между скоростью (ток/с), нагревом и расходом RAM</div>
+
       <div class="set-row">
-        <div class="set-head"><span>Потоки CPU (ядра)</span><b id="valThreads">6</b></div>
-        <input type="range" id="setThreads" min="2" max="8" step="1" oninput="document.getElementById('valThreads').innerText=this.value">
+        <div class="set-head"><span>Рабочие потоки CPU</span><b id="valThreads">6 ядер</b></div>
+        <input type="range" id="setThreads" min="2" max="8" step="1" oninput="document.getElementById('valThreads').innerText=this.value+' ядер'">
+        <div class="set-hint">Для Snapdragon 7 Gen 1 оптимально 4–6 потоков</div>
       </div>
+
       <div class="set-row">
         <div class="set-head"><span>Окно контекста (память диалога)</span></div>
         <select id="setCtx">
-          <option value="2048">2048 токенов (экономия RAM)</option>
-          <option value="4096">4096 токенов (стандарт)</option>
-          <option value="8192">8192 токенов (длинные файлы)</option>
+          <option value="2048">2048 токенов — экономия RAM (рекомендуется для 3B)</option>
+          <option value="4096">4096 токенов — сбалансированный стандарт</option>
+          <option value="8192">8192 токенов — длинные файлы и история</option>
         </select>
       </div>
+    </div>
+
+    <!-- Группа 4: Интерфейс и характер ИИ -->
+    <div class="card">
+      <div class="grp-head">🎛 Интерфейс и поведение ИИ</div>
+      <div class="grp-sub">Телеметрия под сообщениями и стиль общения</div>
+
       <div class="set-row" style="display:flex;justify-content:space-between;align-items:center">
-        <span>Показывать скорость под ответом</span>
+        <div>
+          <div style="font-size:13.5px">Статистика генерации</div>
+          <div class="set-hint">Скорость (ток/с), токены и статус Vision под ответом</div>
+        </div>
         <input type="checkbox" id="setStats" style="width:20px;height:20px;accent-color:var(--acc)">
       </div>
+
       <div class="set-row">
         <div class="set-head"><span>Дополнительный стиль ответа</span></div>
         <textarea class="sys-inp" id="setSys" rows="3"></textarea>
       </div>
-      <button class="btn" onclick="saveSettings()">Сохранить настройки</button>
     </div>
+
+    <button class="btn" onclick="saveSettings()">Применить настройки</button>
+    <button class="btn sec" onclick="resetSettings()">Сбросить по умолчанию</button>
   </div>
 </div>
 
 <script>
 const DEFAULT_CFG = {
   temp: 0.6, topP: 0.9, maxTokens: 1024, threads: 6, ctx: 4096, showStats: true,
-  sysPrompt: 'Отвечай чётко, структурированно и по делу, используя Markdown.'
+  sysPrompt: 'Отвечай чётко, структурированно и по делу на русском языке, используя Markdown.'
 };
 let cfg = Object.assign({}, DEFAULT_CFG, JSON.parse(localStorage.getItem('volt_cfg') || '{}'));
 
@@ -212,19 +246,22 @@ function closeDrawer(){ document.getElementById('drawerBg').classList.remove('op
 function openSheet(id){ document.getElementById(id).classList.add('open'); }
 function closeSheets(){ document.querySelectorAll('.sheet-bg').forEach(e=>e.classList.remove('open')); }
 
-function openSettings() {
+function fillSettingsUi() {
   document.getElementById('setTemp').value = cfg.temp;
   document.getElementById('valTemp').innerText = cfg.temp;
   document.getElementById('setTopP').value = cfg.topP;
   document.getElementById('valTopP').innerText = cfg.topP;
   document.getElementById('setMax').value = cfg.maxTokens;
-  document.getElementById('valMax').innerText = cfg.maxTokens;
+  document.getElementById('valMax').innerText = cfg.maxTokens + ' ток.';
   document.getElementById('setThreads').value = cfg.threads;
-  document.getElementById('valThreads').innerText = cfg.threads;
+  document.getElementById('valThreads').innerText = cfg.threads + ' ядер';
   document.getElementById('setCtx').value = String(cfg.ctx);
   document.getElementById('setStats').checked = cfg.showStats;
   document.getElementById('setSys').value = cfg.sysPrompt;
+}
 
+function openSettings() {
+  fillSettingsUi();
   if (window.VoltAndroid && VoltAndroid.getDeviceHardwareJson) {
     const hw = JSON.parse(VoltAndroid.getDeviceHardwareJson());
     document.getElementById('hwSoc').innerText = hw.soc;
@@ -239,6 +276,11 @@ function openSettings() {
     });
   }
   openSheet('settingsSheet');
+}
+
+function resetSettings() {
+  cfg = Object.assign({}, DEFAULT_CFG);
+  fillSettingsUi();
 }
 
 function saveSettings() {
@@ -513,7 +555,7 @@ function send() {
   const a = document.createElement('div');
   a.className = 'msg-a';
   a.innerHTML = '<div class="spark">✦</div><div class="bot-wrap"><div class="bot-txt"></div>' +
-    (cfg.showStats ? '<div class="stats-bar">Подготовка контекста...</div>' : '') + '</div>';
+    (cfg.showStats ? '<div class="stats-bar">' + (visionDataUrl ? '👁 Обработка фото...' : 'Подготовка контекста...') + '</div>' : '') + '</div>';
   chatEl.appendChild(a);
   activeBotEl = a.querySelector('.bot-txt');
   activeStatsEl = a.querySelector('.stats-bar');
@@ -552,8 +594,11 @@ window.onVoltToken = (tok) => {
   }
 };
 
-window.onVoltStats = (tokens, tps, totalSec) => {
-  lastStatsStr = '⚡ <b>' + tps.toFixed(1) + ' ток/с</b> • ' + tokens + ' токенов • ' + totalSec.toFixed(1) + ' с';
+window.onVoltStats = (tokens, tps, totalSec, visionState) => {
+  let vTag = '';
+  if (visionState === 1) vTag = ' • <span class="v-ok">👁 Vision</span>';
+  else if (visionState < 0) vTag = ' • <span class="v-err">⚠️ Vision err ' + visionState + '</span>';
+  lastStatsStr = '⚡ <b>' + tps.toFixed(1) + ' ток/с</b> • ' + tokens + ' токенов • ' + totalSec.toFixed(1) + ' с' + vTag;
   if (activeStatsEl) activeStatsEl.innerHTML = lastStatsStr;
 };
 

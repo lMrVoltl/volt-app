@@ -30,7 +30,8 @@ Java_com_voltage_ai_MainActivity_nativeLoadModel(
 
     auto cparams = llama_context_default_params();
     cparams.n_ctx = nCtx > 0 ? nCtx : 4096;
-    cparams.n_batch = 512;
+    cparams.n_batch = 2048;
+    cparams.n_ubatch = 2048;
     cparams.n_threads = threads;
     cparams.n_threads_batch = threads;
     g_ctx = llama_init_from_model(g_model, cparams);
@@ -65,7 +66,7 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
 
     jclass cls = env->GetObjectClass(thiz);
     jmethodID onToken = env->GetMethodID(cls, "onNativeToken", "(Ljava/lang/String;)V");
-    jmethodID onStats = env->GetMethodID(cls, "onNativeStats", "(IDD)V");
+    jmethodID onStats = env->GetMethodID(cls, "onNativeStats", "(IDDI)V");
 
     const char* raw = env->GetStringUTFChars(jprompt, nullptr);
     const char* sysRaw = env->GetStringUTFChars(jsysPrompt, nullptr);
@@ -82,43 +83,59 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
     auto t_start = std::chrono::steady_clock::now();
     llama_memory_clear(llama_get_memory(g_ctx), true);
 
-    bool usedVision = false;
-    if (g_mtmd != nullptr && jrgbBytes != nullptr && imgW > 0 && imgH > 0) {
-        jbyte* rgbPtr = env->GetByteArrayElements(jrgbBytes, nullptr);
-        if (rgbPtr != nullptr) {
-            mtmd_bitmap* bmp = mtmd_bitmap_init((uint32_t)imgW, (uint32_t)imgH, (const unsigned char*)rgbPtr);
-            env->ReleaseByteArrayElements(jrgbBytes, rgbPtr, JNI_ABORT);
+    // visionState: 0 = без фото, 1 = Vision OK, <0 = код ошибки
+    int visionState = 0;
+    if (jrgbBytes != nullptr && imgW > 0 && imgH > 0) {
+        if (g_mtmd == nullptr) {
+            visionState = -1;
+        } else {
+            jbyte* rgbPtr = env->GetByteArrayElements(jrgbBytes, nullptr);
+            if (rgbPtr == nullptr) {
+                visionState = -2;
+            } else {
+                mtmd_bitmap* bmp = mtmd_bitmap_init((uint32_t)imgW, (uint32_t)imgH, (const unsigned char*)rgbPtr);
+                env->ReleaseByteArrayElements(jrgbBytes, rgbPtr, JNI_ABORT);
 
-            if (bmp != nullptr) {
-                std::string marker = mtmd_default_marker();
-                size_t pos = userHistory.rfind("<|im_start|>user\n");
-                if (pos != std::string::npos) {
-                    userHistory.insert(pos + 17, marker + "\n");
+                if (bmp == nullptr) {
+                    visionState = -3;
                 } else {
-                    userHistory = marker + "\n" + userHistory;
-                }
-                std::string fullPrompt = "<|im_start|>system\n" + sysStr + "<|im_end|>\n" + userHistory + "<|im_start|>assistant\n";
-
-                mtmd_input_chunks* chunks = mtmd_input_chunks_init();
-                mtmd_input_text itxt;
-                itxt.text = fullPrompt.c_str();
-                itxt.add_special = true;
-                itxt.parse_special = true;
-
-                const mtmd_bitmap* bmps[1] = { bmp };
-                if (mtmd_tokenize(g_mtmd, chunks, &itxt, bmps, 1) == 0) {
-                    llama_pos new_n_past = 0;
-                    if (mtmd_helper_eval_chunks(g_mtmd, g_ctx, chunks, 0, 0, 512, true, &new_n_past) == 0) {
-                        usedVision = true;
+                    std::string visionHistory = userHistory;
+                    std::string marker = mtmd_default_marker();
+                    size_t pos = visionHistory.rfind("<|im_start|>user\n");
+                    if (pos != std::string::npos) {
+                        visionHistory.insert(pos + 17, marker + "\n");
+                    } else {
+                        visionHistory = marker + "\n" + visionHistory;
                     }
+                    std::string fullPrompt = "<|im_start|>system\n" + sysStr + "<|im_end|>\n" + visionHistory + "<|im_start|>assistant\n";
+
+                    mtmd_input_chunks* chunks = mtmd_input_chunks_init();
+                    mtmd_input_text itxt;
+                    itxt.text = fullPrompt.c_str();
+                    itxt.add_special = true;
+                    itxt.parse_special = true;
+
+                    const mtmd_bitmap* bmps[1] = { bmp };
+                    int tokRes = mtmd_tokenize(g_mtmd, chunks, &itxt, bmps, 1);
+                    if (tokRes != 0) {
+                        visionState = -10 - tokRes;
+                    } else {
+                        llama_pos new_n_past = 0;
+                        int evalRes = mtmd_helper_eval_chunks(g_mtmd, g_ctx, chunks, 0, 0, 2048, true, &new_n_past);
+                        if (evalRes != 0) {
+                            visionState = -20 - evalRes;
+                        } else {
+                            visionState = 1;
+                        }
+                    }
+                    mtmd_input_chunks_free(chunks);
+                    mtmd_bitmap_free(bmp);
                 }
-                mtmd_input_chunks_free(chunks);
-                mtmd_bitmap_free(bmp);
             }
         }
     }
 
-    if (!usedVision) {
+    if (visionState != 1) {
         std::string prompt = "<|im_start|>system\n" + sysStr + "<|im_end|>\n" + userHistory + "<|im_start|>assistant\n";
         std::vector<llama_token> tokens(prompt.size() + 32);
         int n_tokens = llama_tokenize(vocab, prompt.c_str(), prompt.size(), tokens.data(), tokens.size(), true, true);
@@ -157,6 +174,6 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
     double total_sec = std::chrono::duration<double>(t_end - t_start).count();
     double tps = gen_sec > 0.01 ? (generated / gen_sec) : 0.0;
 
-    env->CallVoidMethod(thiz, onStats, generated, tps, total_sec);
+    env->CallVoidMethod(thiz, onStats, generated, tps, total_sec, visionState);
     llama_sampler_free(smpl);
 }

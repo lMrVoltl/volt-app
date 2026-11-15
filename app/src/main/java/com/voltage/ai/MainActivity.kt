@@ -157,9 +157,9 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread { webView.evaluateJavascript("window.onVoltToken($escaped)", null) }
     }
 
-    fun onNativeStats(tokens: Int, tps: Double, totalSec: Double) {
+    fun onNativeStats(tokens: Int, tps: Double, totalSec: Double, visionState: Int) {
         runOnUiThread {
-            webView.evaluateJavascript("window.onVoltStats($tokens, $tps, $totalSec)", null)
+            webView.evaluateJavascript("window.onVoltStats($tokens, $tps, $totalSec, $visionState)", null)
         }
     }
 
