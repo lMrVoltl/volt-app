@@ -641,10 +641,10 @@ window.onVoltToken = (tok) => {
   }
 };
 
-window.onVoltStats = (tokens, tps, totalSec, visionState) => {
+window.onVoltStats = (tokens, tps, totalSec, visionState, visionErr) => {
   let vTag = '';
   if (visionState === 1) vTag = ' • <span class="v-ok">👁 Vision</span>';
-  else if (visionState < 0) vTag = ' • <span class="v-err">⚠️ Vision err ' + visionState + '</span>';
+  else if (visionState < 0) vTag = ' • <span class="v-err">⚠️ Vision ' + visionState + (visionErr ? ': ' + visionErr : '') + '</span>';
   lastStatsStr = '⚡ <b>' + tps.toFixed(1) + ' ток/с</b> • ' + tokens + ' токенов • ' + totalSec.toFixed(1) + ' с' + vTag;
   if (activeStatsEl) activeStatsEl.innerHTML = lastStatsStr;
 };

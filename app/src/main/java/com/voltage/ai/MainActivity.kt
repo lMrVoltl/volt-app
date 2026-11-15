@@ -157,9 +157,10 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread { webView.evaluateJavascript("window.onVoltToken($escaped)", null) }
     }
 
-    fun onNativeStats(tokens: Int, tps: Double, totalSec: Double, visionState: Int) {
+    fun onNativeStats(tokens: Int, tps: Double, totalSec: Double, visionState: Int, visionErr: String) {
         runOnUiThread {
-            webView.evaluateJavascript("window.onVoltStats($tokens, $tps, $totalSec, $visionState)", null)
+            val qErr = JSONObject.quote(visionErr)
+            webView.evaluateJavascript("window.onVoltStats($tokens, $tps, $totalSec, $visionState, $qErr)", null)
         }
     }
 
@@ -324,12 +325,9 @@ class MainActivity : AppCompatActivity() {
                         val rawBmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                         val maxSide = 448
                         val scale = minOf(maxSide.toFloat() / rawBmp.width, maxSide.toFloat() / rawBmp.height, 1.0f)
-                        val scaled = Bitmap.createScaledBitmap(
-                            rawBmp,
-                            (rawBmp.width * scale).toInt(),
-                            (rawBmp.height * scale).toInt(),
-                            true
-                        )
+                        val targetW = maxOf(28, (((rawBmp.width * scale).toInt() + 14) / 28) * 28)
+                        val targetH = maxOf(28, (((rawBmp.height * scale).toInt() + 14) / 28) * 28)
+                        val scaled = Bitmap.createScaledBitmap(rawBmp, targetW, targetH, true)
                         w = scaled.width
                         h = scaled.height
                         val pixels = IntArray(w * h)

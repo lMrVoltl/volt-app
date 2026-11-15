@@ -11,6 +11,16 @@ static llama_model* g_model = nullptr;
 static llama_context* g_ctx = nullptr;
 static mtmd_context* g_mtmd = nullptr;
 static std::atomic<bool> g_stop{false};
+static std::string g_lastMtmdErr;
+
+static void volt_mtmd_log_cb(enum ggml_log_level level, const char* text, void*) {
+    if (level == GGML_LOG_LEVEL_ERROR && text != nullptr) {
+        g_lastMtmdErr = text;
+        while (!g_lastMtmdErr.empty() && (g_lastMtmdErr.back() == '\n' || g_lastMtmdErr.back() == '\r')) {
+            g_lastMtmdErr.pop_back();
+        }
+    }
+}
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_voltage_ai_MainActivity_nativeLoadModel(
@@ -19,9 +29,11 @@ Java_com_voltage_ai_MainActivity_nativeLoadModel(
     if (g_mtmd) { mtmd_free(g_mtmd); g_mtmd = nullptr; }
     if (g_ctx) { llama_free(g_ctx); g_ctx = nullptr; }
     if (g_model) { llama_model_free(g_model); g_model = nullptr; }
+    g_lastMtmdErr.clear();
 
     const char* path = env->GetStringUTFChars(jpath, nullptr);
     llama_backend_init();
+    mtmd_log_set(volt_mtmd_log_cb, nullptr);
 
     auto mparams = llama_model_default_params();
     g_model = llama_model_load_from_file(path, mparams);
@@ -66,7 +78,7 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
 
     jclass cls = env->GetObjectClass(thiz);
     jmethodID onToken = env->GetMethodID(cls, "onNativeToken", "(Ljava/lang/String;)V");
-    jmethodID onStats = env->GetMethodID(cls, "onNativeStats", "(IDDI)V");
+    jmethodID onStats = env->GetMethodID(cls, "onNativeStats", "(IDDILjava/lang/String;)V");
 
     const char* raw = env->GetStringUTFChars(jprompt, nullptr);
     const char* sysRaw = env->GetStringUTFChars(jsysPrompt, nullptr);
@@ -83,11 +95,11 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
     auto t_start = std::chrono::steady_clock::now();
     llama_memory_clear(llama_get_memory(g_ctx), true);
 
-    // visionState: 0 = без фото, 1 = Vision OK, <0 = код ошибки
     int visionState = 0;
     if (jrgbBytes != nullptr && imgW > 0 && imgH > 0) {
         if (g_mtmd == nullptr) {
             visionState = -1;
+            if (g_lastMtmdErr.empty()) g_lastMtmdErr = "mmproj не инициализирован";
         } else {
             jbyte* rgbPtr = env->GetByteArrayElements(jrgbBytes, nullptr);
             if (rgbPtr == nullptr) {
@@ -99,6 +111,7 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
                 if (bmp == nullptr) {
                     visionState = -3;
                 } else {
+                    g_lastMtmdErr.clear();
                     std::string visionHistory = userHistory;
                     std::string marker = mtmd_default_marker();
                     size_t pos = visionHistory.rfind("<|im_start|>user\n");
@@ -174,6 +187,8 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
     double total_sec = std::chrono::duration<double>(t_end - t_start).count();
     double tps = gen_sec > 0.01 ? (generated / gen_sec) : 0.0;
 
-    env->CallVoidMethod(thiz, onStats, generated, tps, total_sec, visionState);
+    jstring jerr = env->NewStringUTF(g_lastMtmdErr.c_str());
+    env->CallVoidMethod(thiz, onStats, generated, tps, total_sec, visionState, jerr);
+    env->DeleteLocalRef(jerr);
     llama_sampler_free(smpl);
 }
