@@ -580,7 +580,7 @@ function send() {
         userMsg.hadImg = true;
         if (isVisionModel) {
           visionDataUrl = pendingAttachment.dataUrl;
-          llmText = txt || 'Подробно опиши, что изображено на этом фото.';
+          llmText = (txt ? txt + '. ' : '') + 'Опиши словами на русском языке, что изображено на этой фотографии (без координат).';
         } else {
           llmText = (txt || 'Что на фото?') + (pendingAttachment.extracted ? '\n\n[Текст с фото]:\n' + pendingAttachment.extracted : '\n\n[Внимание: включена текстовая модель ' + activeModelObj.name + ' без Vision. Подскажи пользователю переключиться на Volt Photon v2.0 или Volt Plasma v2.5 в меню сверху.]');
         }

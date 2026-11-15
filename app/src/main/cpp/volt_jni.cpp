@@ -160,6 +160,7 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
     auto t_gen_start = std::chrono::steady_clock::now();
     auto sparams = llama_sampler_chain_default_params();
     llama_sampler* smpl = llama_sampler_chain_init(sparams);
+    llama_sampler_chain_add(smpl, llama_sampler_init_penalties(64, 1.15f, 0.0f, 0.0f));
     llama_sampler_chain_add(smpl, llama_sampler_init_top_p(topP, 1));
     llama_sampler_chain_add(smpl, llama_sampler_init_temp(temp));
     llama_sampler_chain_add(smpl, llama_sampler_init_dist(42));
@@ -172,7 +173,7 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
 
         generated++;
         char buf[256];
-        int n = llama_token_to_piece(vocab, id, buf, sizeof(buf), 0, true);
+        int n = llama_token_to_piece(vocab, id, buf, sizeof(buf), 0, false);
         if (n > 0) {
             std::string piece(buf, n);
             jstring jpiece = env->NewStringUTF(piece.c_str());
