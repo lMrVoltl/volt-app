@@ -168,16 +168,18 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
                 } else {
                     g_lastMtmdErr.clear();
 
-                    std::string prefix = "<|im_start|>system\n" + sysStr + "<|im_end|>\n";
+                    // Четкий языковой и форматный якорь, чтобы Qwen-VL не отвечала на китайском и не писала координаты
+                    std::string visionSys = sysStr + "\nОтвечай строго на русском языке, понятным связным текстом, без координат рамок и технических тегов.";
+                    std::string prefix = "<|im_start|>system\n" + visionSys + "<|im_end|>\n";
                     std::string suffix;
 
                     size_t pos = userHistory.rfind("<|im_start|>user\n");
                     if (pos != std::string::npos) {
                         prefix += userHistory.substr(0, pos + 17);
-                        suffix = "\n" + userHistory.substr(pos + 17) + "<|im_start|>assistant\n";
+                        suffix = userHistory.substr(pos + 17) + "<|im_start|>assistant\n";
                     } else {
                         prefix += "<|im_start|>user\n";
-                        suffix = "\n" + userHistory + "<|im_end|>\n<|im_start|>assistant\n";
+                        suffix = userHistory + "<|im_end|>\n<|im_start|>assistant\n";
                     }
 
                     mtmd_input_chunks* chunks = mtmd_input_chunks_init();
@@ -267,6 +269,13 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
                     logits[bid] = -INFINITY;
                 }
             }
+            // Не даем модели молча завершить ответ на 0-м токене
+            if (generated == 0) {
+                llama_token eos_id = llama_vocab_eos(vocab);
+                llama_token eot_id = llama_vocab_eot(vocab);
+                if (eos_id >= 0 && eos_id < n_vocab) logits[eos_id] = -INFINITY;
+                if (eot_id >= 0 && eot_id < n_vocab) logits[eot_id] = -INFINITY;
+            }
             for (llama_token rtok : recent_tokens) {
                 if (rtok >= 0 && rtok < n_vocab) {
                     if (logits[rtok] > 0.0f) logits[rtok] /= repeat_penalty;
@@ -276,7 +285,10 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
         }
 
         llama_token id = llama_sampler_sample(smpl, g_ctx, -1);
-        if (llama_vocab_is_eog(vocab, id)) break;
+        if (llama_vocab_is_eog(vocab, id)) {
+            if (generated == 0) continue;
+            break;
+        }
         llama_sampler_accept(smpl, id);
 
         if (recent_tokens.size() >= 64) {
@@ -294,6 +306,7 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
                 utf8Pending.erase(0, validLen);
 
                 if (piece.find("<|im_end|>") != std::string::npos || piece.find("<|endoftext|>") != std::string::npos) {
+                    if (generated == 0) continue;
                     break;
                 }
 
