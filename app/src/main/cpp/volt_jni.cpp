@@ -47,28 +47,24 @@ static size_t valid_utf8_prefix_len(const std::string& s) {
     return i;
 }
 
+// Подавляем все спец-токены разметки, детекции рамок и вызова инструментов (<tool_call>, <|box_start|>, <|im_start|> и т.д.)
 static std::vector<llama_token> collect_banned_vision_tokens(const llama_vocab* vocab) {
     std::vector<llama_token> banned_ids;
-    const char* banned_tokens[] = {
-        "<|box_start|>",
-        "<|box_end|>",
-        "<|object_ref_start|>",
-        "<|object_ref_end|>",
-        "<|quad_start|>",
-        "<|quad_end|>",
-        "<|im_start|>",
-        "<|vision_start|>",
-        "<|vision_end|>"
-    };
+    llama_token eos_id = llama_vocab_eos(vocab);
+    llama_token eot_id = llama_vocab_eot(vocab);
+
     int32_t n_vocab = llama_vocab_n_tokens(vocab);
     for (int32_t id = 0; id < n_vocab; id++) {
+        if (id == eos_id || id == eot_id || llama_vocab_is_eog(vocab, id)) continue;
         const char* txt = llama_vocab_get_text(vocab, id);
-        if (!txt) continue;
-        for (const char* banned : banned_tokens) {
-            if (std::strcmp(txt, banned) == 0) {
-                banned_ids.push_back(id);
-                break;
-            }
+        if (!txt || txt[0] == '\0') continue;
+
+        if (std::strncmp(txt, "<|", 2) == 0 ||
+            std::strcmp(txt, "<tool_call>") == 0 ||
+            std::strcmp(txt, "</tool_call>") == 0 ||
+            std::strcmp(txt, "<tool_response>") == 0 ||
+            std::strcmp(txt, "</tool_response>") == 0) {
+            banned_ids.push_back(id);
         }
     }
     return banned_ids;
@@ -168,22 +164,21 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
                 } else {
                     g_lastMtmdErr.clear();
 
-                    // Четкий языковой и форматный якорь, чтобы Qwen-VL не отвечала на китайском и не писала координаты
-                    std::string visionSys = sysStr + "\nОтвечай строго на русском языке, понятным связным текстом, без координат рамок и технических тегов.";
+                    std::string visionSys = sysStr + "\nОтвечай строго на русском языке, понятным связным текстом, без вызова функций, координат рамок и технических тегов.";
                     std::string prefix = "<|im_start|>system\n" + visionSys + "<|im_end|>\n";
                     std::string suffix;
 
                     size_t pos = userHistory.rfind("<|im_start|>user\n");
                     if (pos != std::string::npos) {
                         prefix += userHistory.substr(0, pos + 17);
-                        suffix = userHistory.substr(pos + 17) + "<|im_start|>assistant\n";
+                        suffix = "\n" + userHistory.substr(pos + 17) + "<|im_start|>assistant\n";
                     } else {
                         prefix += "<|im_start|>user\n";
-                        suffix = userHistory + "<|im_end|>\n<|im_start|>assistant\n";
+                        suffix = "\n" + userHistory + "<|im_end|>\n<|im_start|>assistant\n";
                     }
 
                     mtmd_input_chunks* chunks = mtmd_input_chunks_init();
-                    mtmd_input_text t0 = { prefix.c_str(), true, true };
+                    mtmd_input_text t0 = { prefix.c_str(), false, true };
                     mtmd_input_text t2 = { suffix.c_str(), false, true };
                     mtmd_input_part p0 = { &t0, nullptr };
                     mtmd_input_part p1 = { nullptr, bmp };
@@ -269,7 +264,6 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
                     logits[bid] = -INFINITY;
                 }
             }
-            // Не даем модели молча завершить ответ на 0-м токене
             if (generated == 0) {
                 llama_token eos_id = llama_vocab_eos(vocab);
                 llama_token eot_id = llama_vocab_eot(vocab);
