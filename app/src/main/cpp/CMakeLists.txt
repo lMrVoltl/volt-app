@@ -13,4 +13,5 @@ set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
 add_subdirectory(llama.cpp)
 
 add_library(volt_jni SHARED volt_jni.cpp)
-target_link_libraries(volt_jni llama android log)
+target_include_directories(volt_jni PRIVATE llama.cpp/tools/mtmd)
+target_link_libraries(volt_jni llama mtmd android log)

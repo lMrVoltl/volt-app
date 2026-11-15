@@ -48,7 +48,6 @@
   .badge{display:inline-block;font-size:11px;padding:3px 9px;border-radius:12px;background:rgba(129,201,149,.18);color:var(--ok);margin-bottom:6px}
   .btn{width:100%;margin-top:10px;padding:11px;border-radius:14px;border:none;background:var(--acc);color:var(--accTxt);font-weight:600;font-size:14px}
   .btn.sec{background:var(--surf);color:var(--txt)}
-  /* OriginOS / HyperOS Style SoC Card */
   .os-hero{background:linear-gradient(135deg,#1d293e 0%,#261e38 55%,#1b232e 100%);border:1px solid rgba(168,199,250,.22);border-radius:24px;padding:18px;margin-top:12px;position:relative;overflow:hidden}
   .os-tag{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--acc);font-weight:600}
   .os-soc{font-size:20px;font-weight:700;color:#fff;margin-top:4px;line-height:1.25}
@@ -174,7 +173,7 @@
         <input type="checkbox" id="setStats" style="width:20px;height:20px;accent-color:var(--acc)">
       </div>
       <div class="set-row">
-        <div class="set-head"><span>Системный промпт (характер ИИ)</span></div>
+        <div class="set-head"><span>Дополнительный стиль ответа</span></div>
         <textarea class="sys-inp" id="setSys" rows="3"></textarea>
       </div>
       <button class="btn" onclick="saveSettings()">Сохранить настройки</button>
@@ -185,7 +184,7 @@
 <script>
 const DEFAULT_CFG = {
   temp: 0.6, topP: 0.9, maxTokens: 1024, threads: 6, ctx: 4096, showStats: true,
-  sysPrompt: 'Ты Volt AI — быстрый локальный ассистент на смартфоне. Отвечай структурированно, используя Markdown.'
+  sysPrompt: 'Отвечай чётко, структурированно и по делу, используя Markdown.'
 };
 let cfg = Object.assign({}, DEFAULT_CFG, JSON.parse(localStorage.getItem('volt_cfg') || '{}'));
 
@@ -193,6 +192,19 @@ let freeRamMb = 2000, models = [], activeId = null, activeBotEl = null, activeSt
 let rawStream = '', genStartTs = 0, approxTokens = 0, lastStatsStr = '', generating = false;
 let chats = JSON.parse(localStorage.getItem('volt_chats') || '[]');
 let currentChatId = null, pendingAttachment = null;
+
+function buildSystemPrompt(modelObj) {
+  if (!modelObj) return cfg.sysPrompt;
+  const visionCap = modelObj.vision
+    ? 'Ты обладаешь встроенным компьютерным зрением (Vision) и умеешь анализировать фотографии, изображения, графики и документы.'
+    : 'Ты текстовая модель без модуля компьютерного зрения (работаешь с текстом, кодом и текстовыми документами).';
+  const baseInfo = modelObj.base_model ? modelObj.base_model : modelObj.params;
+  const tierInfo = modelObj.tier ? modelObj.tier : modelObj.params;
+  return 'Идентификация: Ты — ' + modelObj.name + ' (' + tierInfo + '), локальная нейросеть из линейки Volt AI от бренда VOLTAGE, работающая полностью офлайн на смартфоне пользователя. ' +
+    'Техническая база: ты построена на основе модели ' + baseInfo + '. ' + visionCap + ' ' +
+    'Когда пользователь спрашивает, кто ты, какая ты модель или на какой базе работаешь, обязательно называй своё полное имя (' + modelObj.name + '), класс (' + tierInfo + ') и базовую модель (' + baseInfo + '). ' +
+    'Стиль общения: ' + cfg.sysPrompt;
+}
 
 function saveChats(){ localStorage.setItem('volt_chats', JSON.stringify(chats)); }
 function openDrawer(){ renderChatList(); document.getElementById('drawerBg').classList.add('open'); }
@@ -296,10 +308,13 @@ function renderChatList() {
 function renderCurrentChat() {
   const box = document.getElementById('chat');
   const c = chats.find(x => x.id === currentChatId);
+  const am = models.find(x => x.id === activeId);
   if (!c || !c.messages.length) {
     const freeGb = (freeRamMb / 1024).toFixed(1);
-    box.innerHTML = '<div class="welcome" id="welcome"><h1>Привет, Volt AI</h1><p id="ramHint">' +
-      (activeId ? 'Модель готова. Можно писать текст, кидать код или фото с текстом.' : 'Свободно ' + freeGb + ' ГБ RAM. Выбери модель сверху.') + '</p></div>';
+    const hint = am
+      ? (am.name + ' (' + (am.base_model || am.params) + ') готова к работе.')
+      : ('Свободно ' + freeGb + ' ГБ RAM. Выбери модель сверху.');
+    box.innerHTML = '<div class="welcome" id="welcome"><h1>Привет, Volt AI</h1><p id="ramHint">' + hint + '</p></div>';
     return;
   }
   box.innerHTML = '';
@@ -336,7 +351,7 @@ function handleFile(inp) {
     reader.onload = () => {
       imgEl.src = reader.result;
       imgEl.style.display = 'block';
-      lbl.innerText = 'Распознавание текста с фото...';
+      lbl.innerText = 'Обработка изображения...';
       bar.classList.add('show');
       pendingAttachment = { type: 'image', name: file.name, dataUrl: reader.result, extracted: '' };
       VoltAndroid.recognizeImageOcr(reader.result);
@@ -358,7 +373,10 @@ function handleFile(inp) {
 window.onOcrDone = (txt) => {
   if (pendingAttachment && pendingAttachment.type === 'image') {
     pendingAttachment.extracted = txt;
-    document.getElementById('prevLabel').innerText = txt.trim() ? '🖼 Фото + распознанный текст' : '🖼 Фото (текст не найден)';
+    const am = models.find(x => x.id === activeId);
+    document.getElementById('prevLabel').innerText = (am && am.vision)
+      ? '👁 Фото готово для ' + am.name
+      : '⚠️ Для анализа фото выбери Volt Photon v2.0 или Volt Plasma v2.5';
   }
 };
 
@@ -382,7 +400,7 @@ window.onload = () => {
 window.onCatalogLoaded = (raw) => {
   models = JSON.parse(raw).models;
   renderModels();
-  const ready = models.find(m => m.downloaded && freeRamMb >= m.min_free_ram_mb) || models.find(m => m.downloaded);
+  const ready = [...models].reverse().find(m => m.downloaded && freeRamMb >= m.min_free_ram_mb) || models.find(m => m.downloaded);
   if (ready) activateModel(ready.id);
 };
 window.onCatalogError = (err) => {
@@ -400,19 +418,20 @@ function renderModels() {
     div.className = 'card';
     div.innerHTML = (isRec ? '<div class="badge">Рекомендовано для устройства</div>' : '') +
       '<div style="display:flex;justify-content:space-between"><b>' + m.name + '</b><span style="font-size:12px;color:var(--sub)">' + m.params + ' • ' + m.size_mb + ' МБ</span></div>' +
+      '<div style="font-size:11.5px;color:var(--acc);margin-top:2px">' + (m.base_model || '') + '</div>' +
       '<div style="font-size:13px;color:var(--sub);margin-top:4px">' + m.description + '</div>' +
       '<div id="act-' + m.id + '">' +
       (m.downloaded
         ? '<button class="btn ' + (isAct ? 'sec' : '') + '" onclick="activateModel(\'' + m.id + '\')">' + (isAct ? 'Активна' : 'Запустить модель') + '</button>'
-        : '<button class="btn" onclick="startDownload(\'' + m.id + '\',\'' + m.download_url + '\')">Скачать с GitHub (' + m.size_mb + ' МБ)</button>') +
+        : '<button class="btn" onclick="startDownload(\'' + m.id + '\',\'' + m.download_url + '\',\'' + (m.mmproj_url || '') + '\')">Скачать (' + m.size_mb + ' МБ)</button>') +
       '</div>';
     box.appendChild(div);
   });
 }
 
-function startDownload(id, url) {
+function startDownload(id, url, mmUrl) {
   document.getElementById('act-' + id).innerHTML = '<button class="btn sec" disabled id="prog-' + id + '">Скачивание: 0%</button>';
-  VoltAndroid.downloadModel(id, url);
+  VoltAndroid.downloadModel(id, url, mmUrl || '');
 }
 window.onDownloadProgress = (id, pct) => {
   const el = document.getElementById('prog-' + id);
@@ -463,6 +482,9 @@ function send() {
 
   const c = chats.find(x => x.id === currentChatId);
   let llmText = txt;
+  let visionDataUrl = '';
+  const activeModelObj = models.find(x => x.id === activeId);
+  const isVisionModel = activeModelObj && activeModelObj.vision;
   const userMsg = { role: 'user', displayText: txt || 'Проанализируй вложение' };
 
   if (pendingAttachment) {
@@ -471,7 +493,12 @@ function send() {
       llmText = (txt || 'Разбери содержимое файла:') + '\n\n[Файл: ' + pendingAttachment.name + ']\n' + pendingAttachment.content;
     } else if (pendingAttachment.type === 'image') {
       userMsg.img = pendingAttachment.dataUrl;
-      llmText = (txt || 'Что изображено на фото?') + (pendingAttachment.extracted ? '\n\n[Текст с изображения]:\n' + pendingAttachment.extracted : '\n\n[Пользователь прикрепил изображение без текста]');
+      if (isVisionModel) {
+        visionDataUrl = pendingAttachment.dataUrl;
+        llmText = txt || 'Подробно опиши, что изображено на этом фото.';
+      } else {
+        llmText = (txt || 'Что на фото?') + (pendingAttachment.extracted ? '\n\n[Текст с фото]:\n' + pendingAttachment.extracted : '\n\n[Внимание: включена текстовая модель ' + activeModelObj.name + ' без Vision. Подскажи пользователю переключиться на Volt Photon v2.0 или Volt Plasma v2.5 в меню сверху.]');
+      }
     }
     clearAttachment();
   }
@@ -505,7 +532,8 @@ function send() {
       ? '<|im_start|>user\n' + m.llmText + '<|im_end|>\n'
       : '<|im_start|>assistant\n' + m.text + '<|im_end|>\n'
   ).join('');
-  VoltAndroid.sendPrompt(recent, cfg.sysPrompt, cfg.temp, cfg.topP, cfg.maxTokens);
+  const fullSysPrompt = buildSystemPrompt(activeModelObj);
+  VoltAndroid.sendPrompt(recent, fullSysPrompt, visionDataUrl, cfg.temp, cfg.topP, cfg.maxTokens);
 }
 
 window.onVoltToken = (tok) => {

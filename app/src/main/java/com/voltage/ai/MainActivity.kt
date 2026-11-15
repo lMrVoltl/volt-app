@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
@@ -72,12 +73,12 @@ class MainActivity : AppCompatActivity() {
         .dns(smartDns)
         .followRedirects(true)
         .followSslRedirects(true)
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(25, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
         .build()
 
-    external fun nativeLoadModel(path: String, threads: Int, nCtx: Int): Boolean
-    external fun nativeGenerate(prompt: String, sysPrompt: String, temp: Float, topP: Float, maxTokens: Int)
+    external fun nativeLoadModel(path: String, mmprojPath: String, threads: Int, nCtx: Int): Boolean
+    external fun nativeGenerate(prompt: String, sysPrompt: String, imgPath: String, temp: Float, topP: Float, maxTokens: Int)
     external fun nativeStop()
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -114,6 +115,41 @@ class MainActivity : AppCompatActivity() {
         val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "VoltModels")
         if (!dir.exists()) dir.mkdirs()
         return dir
+    }
+
+    private fun downloadSingleFile(urlStr: String, target: File, progressStart: Int, progressSpan: Int, id: String) {
+        val tmp = File(target.parentFile, target.name + ".part")
+        val req = Request.Builder().url(urlStr).build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
+            val body = resp.body ?: throw Exception("Нет данных")
+            val total = body.contentLength()
+            var downloaded = 0L
+            var lastPct = -1
+
+            body.byteStream().use { input ->
+                FileOutputStream(tmp).use { output ->
+                    val buf = ByteArray(65536)
+                    while (true) {
+                        val r = input.read(buf)
+                        if (r <= 0) break
+                        output.write(buf, 0, r)
+                        downloaded += r
+                        if (total > 0) {
+                            val pct = progressStart + ((downloaded * progressSpan) / total).toInt()
+                            if (pct != lastPct) {
+                                lastPct = pct
+                                runOnUiThread {
+                                    webView.evaluateJavascript("window.onDownloadProgress('$id', $pct)", null)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (target.exists()) target.delete()
+        tmp.renameTo(target)
     }
 
     fun onNativeToken(token: String) {
@@ -169,13 +205,13 @@ class MainActivity : AppCompatActivity() {
             val totalGb = Math.round((mi.totalMem / (1024.0 * 1024.0 * 1024.0)) * 10.0) / 10.0
 
             val supported = JSONArray().apply {
-                put(JSONObject().put("tier", "0.5B • Volt Photon").put("quant", "Q4_K_M / Q5_K_M / Q8_0").put("status", "Максимальная скорость"))
-                put(JSONObject().put("tier", "1.5B – 2B • Volt Plasma").put("quant", "Q4_K_M / Q5_K_M").put("status", "Оптимально"))
+                put(JSONObject().put("tier", "Volt Ion v2.5 • 1.5B Fast").put("quant", "Qwen 2.5 1.5B • Текст и файлы").put("status", "Максимальная скорость"))
+                put(JSONObject().put("tier", "Volt Photon v2.0 • 2B Vision").put("quant", "Qwen2-VL 2B + mmproj FP16").put("status", "Субфлагман (фото + текст)"))
                 if (totalGb >= 7.5) {
-                    put(JSONObject().put("tier", "3B – 4B • Heavy").put("quant", "Q4_K_M").put("status", if (hasDotProd) "Поддерживается (ускорение DotProd)" else "Поддерживается"))
+                    put(JSONObject().put("tier", "Volt Plasma v2.5 • 3B Vision").put("quant", "Qwen2.5-VL 3B + mmproj Q8_0").put("status", if (hasDotProd) "Флагман (ускорение DotProd)" else "Флагман"))
                 }
                 if (totalGb >= 11.0) {
-                    put(JSONObject().put("tier", "7B – 8B • Ultra").put("quant", "IQ4_XS / Q4_K_M").put("status", "Запуск при >4.5 ГБ свободной RAM"))
+                    put(JSONObject().put("tier", "7B • Experimental").put("quant", "IQ4_XS / Q4_K_M").put("status", "При >4.5 ГБ свободной RAM"))
                 }
             }
 
@@ -225,8 +261,13 @@ class MainActivity : AppCompatActivity() {
                     val dir = modelsDir()
                     for (i in 0 until models.length()) {
                         val m = models.getJSONObject(i)
-                        val file = File(dir, m.getString("id") + ".gguf")
-                        m.put("downloaded", file.exists() && file.length() > 10_000_000)
+                        val id = m.getString("id")
+                        val file = File(dir, "$id.gguf")
+                        val hasMmproj = m.optString("mmproj_url", "").isNotEmpty()
+                        val mmFile = File(dir, "$id-mmproj.gguf")
+                        val ready = file.exists() && file.length() > 10_000_000 &&
+                            (!hasMmproj || (mmFile.exists() && mmFile.length() > 10_000_000))
+                        m.put("downloaded", ready)
                     }
                     val quoted = JSONObject.quote(json.toString())
                     runOnUiThread { webView.evaluateJavascript("window.onCatalogLoaded($quoted)", null) }
@@ -238,43 +279,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
-        fun downloadModel(id: String, urlStr: String) {
+        fun downloadModel(id: String, urlStr: String, mmprojUrl: String) {
             thread {
                 try {
                     val dir = modelsDir()
                     val target = File(dir, "$id.gguf")
-                    val tmp = File(dir, "$id.gguf.part")
-
-                    val req = Request.Builder().url(urlStr).build()
-                    client.newCall(req).execute().use { resp ->
-                        if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
-                        val body = resp.body ?: throw Exception("Нет данных")
-                        val total = body.contentLength()
-                        var downloaded = 0L
-                        var lastPct = -1
-
-                        body.byteStream().use { input ->
-                            FileOutputStream(tmp).use { output ->
-                                val buf = ByteArray(65536)
-                                while (true) {
-                                    val r = input.read(buf)
-                                    if (r <= 0) break
-                                    output.write(buf, 0, r)
-                                    downloaded += r
-                                    if (total > 0) {
-                                        val pct = ((downloaded * 100) / total).toInt()
-                                        if (pct != lastPct) {
-                                            lastPct = pct
-                                            runOnUiThread {
-                                                webView.evaluateJavascript("window.onDownloadProgress('$id', $pct)", null)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    if (mmprojUrl.isNotEmpty()) {
+                        downloadSingleFile(urlStr, target, 0, 65, id)
+                        val mmTarget = File(dir, "$id-mmproj.gguf")
+                        downloadSingleFile(mmprojUrl, mmTarget, 65, 35, id)
+                    } else {
+                        downloadSingleFile(urlStr, target, 0, 100, id)
                     }
-                    tmp.renameTo(target)
                     runOnUiThread { webView.evaluateJavascript("window.onDownloadDone('$id')", null) }
                 } catch (e: Exception) {
                     val err = JSONObject.quote(e.message ?: "Ошибка загрузки")
@@ -286,16 +302,40 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun loadModel(id: String, threads: Int, nCtx: Int) {
             thread {
-                val file = File(modelsDir(), "$id.gguf")
-                val ok = file.exists() && nativeLoadModel(file.absolutePath, threads, nCtx)
+                val dir = modelsDir()
+                val file = File(dir, "$id.gguf")
+                val mmFile = File(dir, "$id-mmproj.gguf")
+                val mmPath = if (mmFile.exists() && mmFile.length() > 10_000_000) mmFile.absolutePath else ""
+                val ok = file.exists() && nativeLoadModel(file.absolutePath, mmPath, threads, nCtx)
                 runOnUiThread { webView.evaluateJavascript("window.onModelLoaded('$id', $ok)", null) }
             }
         }
 
         @JavascriptInterface
-        fun sendPrompt(formattedHistory: String, sysPrompt: String, temp: Float, topP: Float, maxTokens: Int) {
+        fun sendPrompt(formattedHistory: String, sysPrompt: String, imgBase64: String, temp: Float, topP: Float, maxTokens: Int) {
             thread {
-                nativeGenerate(formattedHistory, sysPrompt, temp, topP, maxTokens)
+                var imgPath = ""
+                if (imgBase64.isNotEmpty()) {
+                    try {
+                        val clean = imgBase64.substringAfter(",")
+                        val bytes = Base64.decode(clean, Base64.DEFAULT)
+                        val rawBmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        val maxSide = 768
+                        val scale = minOf(maxSide.toFloat() / rawBmp.width, maxSide.toFloat() / rawBmp.height, 1.0f)
+                        val scaled = Bitmap.createScaledBitmap(
+                            rawBmp,
+                            (rawBmp.width * scale).toInt(),
+                            (rawBmp.height * scale).toInt(),
+                            true
+                        )
+                        val tmpImg = File(cacheDir, "vision_input.jpg")
+                        FileOutputStream(tmpImg).use { out ->
+                            scaled.compress(Bitmap.CompressFormat.JPEG, 88, out)
+                        }
+                        imgPath = tmpImg.absolutePath
+                    } catch (_: Exception) {}
+                }
+                nativeGenerate(formattedHistory, sysPrompt, imgPath, temp, topP, maxTokens)
                 runOnUiThread { webView.evaluateJavascript("window.onVoltDone()", null) }
             }
         }
