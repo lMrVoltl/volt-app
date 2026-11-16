@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(volt_jni)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG -march=armv8.2-a+dotprod+fp16+i8mm -ffast-math")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -DNDEBUG -march=armv8.2-a+dotprod+fp16+i8mm -ffast-math")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=armv8.2-a+dotprod+fp16+i8mm -ffast-math" CACHE STRING "" FORCE)
+set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG -march=armv8.2-a+dotprod+fp16+i8mm -ffast-math" CACHE STRING "" FORCE)
 
 set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+set(GGML_CPU_KLEIDIAI ON CACHE BOOL "" FORCE)
 set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)

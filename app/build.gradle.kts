@@ -13,7 +13,14 @@ android {
         versionName = "1.1.1"
         ndk { abiFilters += listOf("arm64-v8a") }
         externalNativeBuild {
-            cmake { arguments += listOf("-DANDROID_STL=c++_shared", "-DCMAKE_BUILD_TYPE=Release") }
+            cmake {
+                arguments += listOf(
+                    "-DANDROID_STL=c++_shared",
+                    "-DCMAKE_BUILD_TYPE=Release",
+                    "-DGGML_NATIVE=OFF",
+                    "-DGGML_CPU_KLEIDIAI=ON"
+                )
+            }
         }
     }
     signingConfigs {
@@ -27,6 +34,11 @@ android {
     buildTypes {
         debug {
             signingConfig = signingConfigs.getByName("voltSign")
+            externalNativeBuild {
+                cmake {
+                    arguments += listOf("-DCMAKE_BUILD_TYPE=Release")
+                }
+            }
         }
         release {
             isMinifyEnabled = false

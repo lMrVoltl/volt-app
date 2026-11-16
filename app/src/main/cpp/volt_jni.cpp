@@ -16,6 +16,7 @@ static mtmd_context* g_mtmd = nullptr;
 static std::atomic<bool> g_stop{false};
 static std::string g_lastMtmdErr;
 static std::vector<llama_token> g_cached_tokens;
+static std::vector<llama_token> g_banned_ids;
 
 static void volt_mtmd_log_cb(enum ggml_log_level level, const char* text, void*) {
     if (level == GGML_LOG_LEVEL_ERROR && text != nullptr) {
@@ -48,8 +49,9 @@ static size_t valid_utf8_prefix_len(const std::string& s) {
     return i;
 }
 
-static std::vector<llama_token> collect_banned_vision_tokens(const llama_vocab* vocab) {
-    std::vector<llama_token> banned_ids;
+static void rebuild_banned_tokens_cache(const llama_vocab* vocab) {
+    g_banned_ids.clear();
+    if (!vocab) return;
     llama_token eos_id = llama_vocab_eos(vocab);
     llama_token eot_id = llama_vocab_eot(vocab);
 
@@ -64,10 +66,9 @@ static std::vector<llama_token> collect_banned_vision_tokens(const llama_vocab* 
             std::strcmp(txt, "</tool_call>") == 0 ||
             std::strcmp(txt, "<tool_response>") == 0 ||
             std::strcmp(txt, "</tool_response>") == 0) {
-            banned_ids.push_back(id);
+            g_banned_ids.push_back(id);
         }
     }
-    return banned_ids;
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
@@ -78,6 +79,7 @@ Java_com_voltage_ai_MainActivity_nativeLoadModel(
     if (g_ctx) { llama_free(g_ctx); g_ctx = nullptr; }
     if (g_model) { llama_model_free(g_model); g_model = nullptr; }
     g_cached_tokens.clear();
+    g_banned_ids.clear();
     g_lastMtmdErr.clear();
 
     const char* path = env->GetStringUTFChars(jpath, nullptr);
@@ -90,7 +92,9 @@ Java_com_voltage_ai_MainActivity_nativeLoadModel(
     env->ReleaseStringUTFChars(jpath, path);
     if (!g_model) return JNI_FALSE;
 
-    // Используем ровно столько потоков, сколько выбрал пользователь (рекомендуется 4 для big-кластера)
+    // Кэшируем запрещенные спец-токены один раз при загрузке модели, а не на каждом сообщении
+    rebuild_banned_tokens_cache(llama_model_get_vocab(g_model));
+
     int t = std::max(1, std::min((int)threads, 8));
 
     auto cparams = llama_context_default_params();
@@ -99,7 +103,6 @@ Java_com_voltage_ai_MainActivity_nativeLoadModel(
     cparams.n_ubatch = 512;
     cparams.n_threads = t;
     cparams.n_threads_batch = t;
-    // Оставляем стандартный быстрый F16 KV-кэш (Q8_0 без FlashAttn вызывает медленную деквантовку на CPU)
     cparams.type_k = GGML_TYPE_F16;
     cparams.type_v = GGML_TYPE_F16;
 
@@ -285,7 +288,6 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
     llama_sampler_chain_add(smpl, llama_sampler_init_temp(temp));
     llama_sampler_chain_add(smpl, llama_sampler_init_dist(42));
 
-    auto banned_ids = collect_banned_vision_tokens(vocab);
     int32_t n_vocab = llama_vocab_n_tokens(vocab);
     std::vector<llama_token> recent_tokens;
     recent_tokens.reserve(64);
@@ -301,7 +303,7 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
     for (int i = 0; i < limit && !g_stop; i++) {
         float* logits = llama_get_logits_ith(g_ctx, -1);
         if (logits != nullptr) {
-            for (llama_token bid : banned_ids) {
+            for (llama_token bid : g_banned_ids) {
                 if (bid >= 0 && bid < n_vocab) {
                     logits[bid] = -INFINITY;
                 }
