@@ -15,8 +15,6 @@ static llama_context* g_ctx = nullptr;
 static mtmd_context* g_mtmd = nullptr;
 static std::atomic<bool> g_stop{false};
 static std::string g_lastMtmdErr;
-
-// Кэш токенов предыдущего текстового промпта для мгновенного продолжения диалога без пересчета с нуля
 static std::vector<llama_token> g_cached_tokens;
 
 static void volt_mtmd_log_cb(enum ggml_log_level level, const char* text, void*) {
@@ -92,18 +90,18 @@ Java_com_voltage_ai_MainActivity_nativeLoadModel(
     env->ReleaseStringUTFChars(jpath, path);
     if (!g_model) return JNI_FALSE;
 
-    // Ограничиваем потоки генерации 4 быстрыми ядрами (Cortex-A710), чтобы слабые ядра не тормозили синхронизацию
-    int genThreads = std::max(1, std::min((int)threads, 4));
-    int batchThreads = std::max(genThreads, std::min((int)threads, 6));
+    // Используем ровно столько потоков, сколько выбрал пользователь (рекомендуется 4 для big-кластера)
+    int t = std::max(1, std::min((int)threads, 8));
 
     auto cparams = llama_context_default_params();
     cparams.n_ctx = nCtx > 0 ? nCtx : 4096;
     cparams.n_batch = 512;
     cparams.n_ubatch = 512;
-    cparams.n_threads = genThreads;
-    cparams.n_threads_batch = batchThreads;
-    cparams.type_k = GGML_TYPE_Q8_0;
-    cparams.type_v = GGML_TYPE_Q8_0;
+    cparams.n_threads = t;
+    cparams.n_threads_batch = t;
+    // Оставляем стандартный быстрый F16 KV-кэш (Q8_0 без FlashAttn вызывает медленную деквантовку на CPU)
+    cparams.type_k = GGML_TYPE_F16;
+    cparams.type_v = GGML_TYPE_F16;
 
     g_ctx = llama_init_from_model(g_model, cparams);
     if (!g_ctx) return JNI_FALSE;
@@ -113,7 +111,7 @@ Java_com_voltage_ai_MainActivity_nativeLoadModel(
         if (mmpath && mmpath[0] != '\0') {
             auto mctx_params = mtmd_context_params_default();
             mctx_params.use_gpu = false;
-            mctx_params.n_threads = batchThreads;
+            mctx_params.n_threads = t;
             g_mtmd = mtmd_init_from_file(mmpath, g_model, mctx_params);
         }
         env->ReleaseStringUTFChars(jmmproj, mmpath);
@@ -239,7 +237,6 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
         if (n_tokens < 0) return;
         tokens.resize(n_tokens);
 
-        // Находим общий префикс с прошлым ходом, чтобы не пересчитывать весь чат заново
         size_t common_prefix = 0;
         size_t max_common = std::min(g_cached_tokens.size(), tokens.size() > 0 ? tokens.size() - 1 : 0);
         while (common_prefix < max_common && g_cached_tokens[common_prefix] == tokens[common_prefix]) {
