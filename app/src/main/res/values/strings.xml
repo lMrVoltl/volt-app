@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Volt AI</string>
+    <string name="agent_service_desc">Volt AI Агент — позволяет локальной нейросети нажимать кнопки, вводить текст и управлять интерфейсом по вашей команде.</string>
+</resources>

@@ -10,6 +10,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.content.pm.PackageManager
+import android.hardware.camera2.CameraManager
+import android.provider.AlarmClock
 import android.provider.Settings
 import android.util.Base64
 import android.webkit.JavascriptInterface
@@ -416,6 +419,144 @@ class MainActivity : AppCompatActivity() {
         fun pickCustomModelFile() {
             runOnUiThread {
                 customModelPickerLauncher.launch(arrayOf("*/*"))
+            }
+        }
+
+        @JavascriptInterface
+        fun isAgentAccessibilityEnabled(): Boolean = VoltAgentService.isEnabled()
+
+        @JavascriptInterface
+        fun getScreenUiState(): String = VoltAgentService.dumpScreenTree()
+
+        @JavascriptInterface
+        fun openAccessibilitySettings() {
+            runOnUiThread {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+            }
+        }
+
+        @JavascriptInterface
+        fun executeAgentAction(jsonAction: String): String {
+            return try {
+                val obj = JSONObject(jsonAction)
+                val action = obj.optString("action", "").lowercase()
+                val target = obj.optString("target", "")
+                val value = obj.optString("value", "")
+
+                when (action) {
+                    "open_app" -> {
+                        val pm = packageManager
+                        val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+                        var matchedPkg: String? = null
+                        for (app in apps) {
+                            val label = pm.getApplicationLabel(app).toString()
+                            if (label.equals(target, true) || label.contains(target, true) || app.packageName.contains(target, true)) {
+                                if (pm.getLaunchIntentForPackage(app.packageName) != null) {
+                                    matchedPkg = app.packageName
+                                    if (label.equals(target, true)) break
+                                }
+                            }
+                        }
+                        if (matchedPkg != null) {
+                            val launch = pm.getLaunchIntentForPackage(matchedPkg)!!
+                            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            startActivity(launch)
+                            "Открыто приложение: $target"
+                        } else {
+                            "Приложение «$target» не найдено"
+                        }
+                    }
+                    "set_alarm" -> {
+                        val parts = target.split(":")
+                        val hour = parts.getOrNull(0)?.trim()?.toIntOrNull() ?: 8
+                        val min = parts.getOrNull(1)?.trim()?.toIntOrNull() ?: 0
+                        val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+                            putExtra(AlarmClock.EXTRA_HOUR, hour)
+                            putExtra(AlarmClock.EXTRA_MINUTES, min)
+                            putExtra(AlarmClock.EXTRA_MESSAGE, value.ifEmpty { "Volt AI" })
+                            putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(intent)
+                        "Будильник установлен на %02d:%02d".format(hour, min)
+                    }
+                    "set_timer" -> {
+                        val sec = target.filter { it.isDigit() }.toIntOrNull() ?: 60
+                        val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
+                            putExtra(AlarmClock.EXTRA_LENGTH, sec)
+                            putExtra(AlarmClock.EXTRA_MESSAGE, value.ifEmpty { "Volt AI Таймер" })
+                            putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(intent)
+                        "Таймер запущен на $sec сек."
+                    }
+                    "flashlight" -> {
+                        val cm = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                        val camId = cm.cameraIdList.firstOrNull() ?: return "Вспышка не найдена"
+                        val turnOn = target.equals("on", true) || target.equals("вкл", true) || target == "1"
+                        cm.setTorchMode(camId, turnOn)
+                        if (turnOn) "Фонарик включён" else "Фонарик выключен"
+                    }
+                    "search_web" -> {
+                        val uri = Uri.parse("https://www.google.com/search?q=" + Uri.encode(target))
+                        startActivity(Intent(Intent.ACTION_VIEW, uri).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+                        "Открыт поиск: $target"
+                    }
+                    "open_settings" -> {
+                        val act = when (target.lowercase()) {
+                            "wifi" -> Settings.ACTION_WIFI_SETTINGS
+                            "bluetooth" -> Settings.ACTION_BLUETOOTH_SETTINGS
+                            "battery" -> Settings.ACTION_BATTERY_SAVER_SETTINGS
+                            else -> Settings.ACTION_SETTINGS
+                        }
+                        startActivity(Intent(act).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+                        "Открыты настройки ($target)"
+                    }
+                    "click_id" -> {
+                        val idx = target.filter { it.isDigit() }.toIntOrNull() ?: -1
+                        if (!VoltAgentService.isEnabled()) "Нужно включить спец. возможности для Volt AI Агента"
+                        else if (VoltAgentService.clickById(idx)) "Нажат элемент [$idx]"
+                        else "Элемент [$idx] не найден"
+                    }
+                    "tap_xy" -> {
+                        val coords = target.split(",")
+                        val x = coords.getOrNull(0)?.trim()?.toFloatOrNull() ?: 0f
+                        val y = coords.getOrNull(1)?.trim()?.toFloatOrNull() ?: 0f
+                        if (!VoltAgentService.isEnabled()) "Нужно включить спец. возможности"
+                        else if (VoltAgentService.tapAt(x, y)) "Тап по ($x, $y)"
+                        else "Не удалось выполнить тап"
+                    }
+                    "click" -> {
+                        if (!VoltAgentService.isEnabled()) "Нужно включить спец. возможности для Volt AI Агента"
+                        else if (VoltAgentService.clickByText(target)) "Нажато: «$target»"
+                        else "Элемент «$target» не найден на экране"
+                    }
+                    "input_text" -> {
+                        val idx = value.filter { it.isDigit() }.toIntOrNull() ?: -1
+                        if (!VoltAgentService.isEnabled()) "Нужно включить спец. возможности для Volt AI Агента"
+                        else if (VoltAgentService.inputText(target, idx)) "Введён текст: «$target»"
+                        else "Поле ввода не найдено"
+                    }
+                    "scroll" -> {
+                        if (!VoltAgentService.isEnabled()) "Нужно включить спец. возможности для Volt AI Агента"
+                        else if (VoltAgentService.scrollDown()) "Экран прокручен вниз"
+                        else "Не удалось прокрутить экран"
+                    }
+                    "back" -> {
+                        VoltAgentService.goBack()
+                        "Выполнено: Назад"
+                    }
+                    "home" -> {
+                        VoltAgentService.goHome()
+                        "Переход на главный экран"
+                    }
+                    else -> "Неизвестная команда агента: $action"
+                }
+            } catch (e: Exception) {
+                "Ошибка выполнения: ${e.message}"
             }
         }
 
