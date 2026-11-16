@@ -112,9 +112,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun modelsDir(): File {
-        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "VoltModels")
-        if (!dir.exists()) dir.mkdirs()
-        return dir
+        val appDir = File(getExternalFilesDir(null) ?: filesDir, "VoltModels")
+        if (!appDir.exists()) appDir.mkdirs()
+        return appDir
+    }
+
+    private fun resolveModelFile(fileName: String): File {
+        val appFile = File(modelsDir(), fileName)
+        if (appFile.exists() && appFile.length() > 10_000_000L) return appFile
+        val pubDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "VoltModels")
+        val pubFile = File(pubDir, fileName)
+        if (pubFile.exists() && pubFile.length() > 10_000_000L) return pubFile
+        return appFile
     }
 
     private fun downloadSingleFile(urlStr: String, target: File, progressStart: Int, progressSpan: Int, id: String) {
@@ -261,9 +270,9 @@ class MainActivity : AppCompatActivity() {
                     for (i in 0 until models.length()) {
                         val m = models.getJSONObject(i)
                         val id = m.getString("id")
-                        val file = File(dir, "$id.gguf")
+                        val file = resolveModelFile("$id.gguf")
                         val hasMmproj = m.optString("mmproj_url", "").isNotEmpty()
-                        val mmFile = File(dir, "$id-mmproj.gguf")
+                        val mmFile = resolveModelFile("$id-mmproj.gguf")
                         val ready = file.exists() && file.length() > 10_000_000 &&
                             (!hasMmproj || (mmFile.exists() && mmFile.length() > 10_000_000))
                         m.put("downloaded", ready)
@@ -301,9 +310,8 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun loadModel(id: String, threads: Int, nCtx: Int) {
             thread {
-                val dir = modelsDir()
-                val file = File(dir, "$id.gguf")
-                val mmFile = File(dir, "$id-mmproj.gguf")
+                val file = resolveModelFile("$id.gguf")
+                val mmFile = resolveModelFile("$id-mmproj.gguf")
                 val mmPath = if (mmFile.exists() && mmFile.length() > 10_000_000) mmFile.absolutePath else ""
                 val ok = file.exists() && nativeLoadModel(file.absolutePath, mmPath, threads, nCtx)
                 runOnUiThread { webView.evaluateJavascript("window.onModelLoaded('$id', $ok)", null) }
