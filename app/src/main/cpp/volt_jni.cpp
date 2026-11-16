@@ -87,7 +87,6 @@ Java_com_voltage_ai_MainActivity_nativeLoadModel(
     mtmd_log_set(volt_mtmd_log_cb, nullptr);
 
     auto mparams = llama_model_default_params();
-    mparams.use_mmap = true;
     g_model = llama_model_load_from_file(path, mparams);
     env->ReleaseStringUTFChars(jpath, path);
     if (!g_model) return JNI_FALSE;
