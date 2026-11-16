@@ -52,6 +52,46 @@ class MainActivity : AppCompatActivity() {
         fileUploadCallback = null
     }
 
+    private val customModelPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            thread {
+                try {
+                    val rawName = uri.lastPathSegment?.substringAfterLast('/') ?: "custom-model.gguf"
+                    val cleanName = if (rawName.endsWith(".gguf", true)) rawName else "$rawName.gguf"
+                    val id = "custom-" + cleanName.removeSuffix(".gguf").replace(Regex("[^a-zA-Z0-9._-]"), "_")
+                    val target = File(modelsDir(), "$id.gguf")
+                    contentResolver.openInputStream(uri)?.use { input ->
+                        FileOutputStream(target).use { output ->
+                            input.copyTo(output, 65536)
+                        }
+                    }
+                    val sizeMb = target.length() / (1024 * 1024)
+                    val obj = JSONObject()
+                        .put("id", id)
+                        .put("name", cleanName.removeSuffix(".gguf"))
+                        .put("tier", "Локальная модель (.gguf)")
+                        .put("base_model", cleanName)
+                        .put("params", "Custom GGUF")
+                        .put("size_mb", sizeMb)
+                        .put("min_free_ram_mb", 1500)
+                        .put("vision", false)
+                        .put("uncensored", true)
+                        .put("description", "Импортировано вручную с устройства.")
+                        .put("download_url", "")
+                        .put("mmproj_url", "")
+                        .put("downloaded", true)
+                    val quoted = JSONObject.quote(obj.toString())
+                    runOnUiThread { webView.evaluateJavascript("window.onCustomModelImported($quoted)", null) }
+                } catch (e: Exception) {
+                    val err = JSONObject.quote(e.message ?: "Ошибка импорта файла")
+                    runOnUiThread { webView.evaluateJavascript("window.onCustomModelError($err)", null) }
+                }
+            }
+        }
+    }
+
     private val smartDns = object : Dns {
         override fun lookup(hostname: String): List<InetAddress> {
             return try {
@@ -216,7 +256,7 @@ class MainActivity : AppCompatActivity() {
 
             val supported = JSONArray().apply {
                 put(JSONObject().put("tier", "Volt Ion v2.5 • 1.5B Fast").put("quant", "Qwen 2.5 1.5B • Текст и файлы").put("status", "Максимальная скорость"))
-                put(JSONObject().put("tier", "Volt Neutron v2.5 • 1.5B Uncensored").put("quant", "Qwen 2.5 1.5B Abliterated • RP / Без фильтров").put("status", "Свободный диалог"))
+                put(JSONObject().put("tier", "Volt Neutron v2.5 • 1.5B Uncensored").put("quant", "Qwen 2.5 1.5B Abliterated • Без фильтров").put("status", "Свободный диалог"))
                 put(JSONObject().put("tier", "Volt Photon v2.0 • 2B Vision").put("quant", "Qwen2-VL 2B + mmproj FP16").put("status", "Субфлагман (фото + текст)"))
                 if (totalGb >= 7.5) {
                     put(JSONObject().put("tier", "Volt Plasma v2.5 • 3B Vision").put("quant", "Qwen2.5-VL 3B + mmproj Q8_0").put("status", if (hasDotProd) "Флагман (ускорение DotProd)" else "Флагман"))
@@ -276,6 +316,25 @@ class MainActivity : AppCompatActivity() {
                         val ready = file.exists() && file.length() > 10_000_000 &&
                             (!hasMmproj || (mmFile.exists() && mmFile.length() > 10_000_000))
                         m.put("downloaded", ready)
+                    }
+                    val appDir = modelsDir()
+                    appDir.listFiles()?.filter { it.isFile && it.name.startsWith("custom-") && it.name.endsWith(".gguf") && it.length() > 10_000_000L }?.forEach { cf ->
+                        val cid = cf.name.removeSuffix(".gguf")
+                        val cname = cid.removePrefix("custom-")
+                        models.put(JSONObject()
+                            .put("id", cid)
+                            .put("name", cname)
+                            .put("tier", "Локальная модель (.gguf)")
+                            .put("base_model", cf.name)
+                            .put("params", "Custom GGUF")
+                            .put("size_mb", cf.length() / (1024 * 1024))
+                            .put("min_free_ram_mb", 1500)
+                            .put("vision", false)
+                            .put("uncensored", true)
+                            .put("description", "Локальный файл модели с устройства.")
+                            .put("download_url", "")
+                            .put("mmproj_url", "")
+                            .put("downloaded", true))
                     }
                     val quoted = JSONObject.quote(json.toString())
                     runOnUiThread { webView.evaluateJavascript("window.onCatalogLoaded($quoted)", null) }
@@ -350,6 +409,13 @@ class MainActivity : AppCompatActivity() {
                 }
                 nativeGenerate(formattedHistory, sysPrompt, rgbBytes, w, h, temp, topP, maxTokens)
                 runOnUiThread { webView.evaluateJavascript("window.onVoltDone()", null) }
+            }
+        }
+
+        @JavascriptInterface
+        fun pickCustomModelFile() {
+            runOnUiThread {
+                customModelPickerLauncher.launch(arrayOf("*/*"))
             }
         }
 
