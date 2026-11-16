@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(volt_jni)
 
-add_compile_options(-O3 -DNDEBUG -march=armv8.2-a+dotprod+fp16+i8mm -ffast-math)
+add_compile_options(-O3 -DNDEBUG -march=armv8.2-a+dotprod+fp16+i8mm)
 
 set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 set(GGML_CPU_KLEIDIAI ON CACHE BOOL "" FORCE)
