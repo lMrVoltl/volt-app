@@ -16,6 +16,9 @@ static mtmd_context* g_mtmd = nullptr;
 static std::atomic<bool> g_stop{false};
 static std::string g_lastMtmdErr;
 
+// Кэш токенов предыдущего текстового промпта для мгновенного продолжения диалога без пересчета с нуля
+static std::vector<llama_token> g_cached_tokens;
+
 static void volt_mtmd_log_cb(enum ggml_log_level level, const char* text, void*) {
     if (level == GGML_LOG_LEVEL_ERROR && text != nullptr) {
         g_lastMtmdErr = text;
@@ -47,7 +50,6 @@ static size_t valid_utf8_prefix_len(const std::string& s) {
     return i;
 }
 
-// Подавляем все спец-токены разметки, детекции рамок и вызова инструментов (<tool_call>, <|box_start|>, <|im_start|> и т.д.)
 static std::vector<llama_token> collect_banned_vision_tokens(const llama_vocab* vocab) {
     std::vector<llama_token> banned_ids;
     llama_token eos_id = llama_vocab_eos(vocab);
@@ -77,6 +79,7 @@ Java_com_voltage_ai_MainActivity_nativeLoadModel(
     if (g_mtmd) { mtmd_free(g_mtmd); g_mtmd = nullptr; }
     if (g_ctx) { llama_free(g_ctx); g_ctx = nullptr; }
     if (g_model) { llama_model_free(g_model); g_model = nullptr; }
+    g_cached_tokens.clear();
     g_lastMtmdErr.clear();
 
     const char* path = env->GetStringUTFChars(jpath, nullptr);
@@ -84,16 +87,24 @@ Java_com_voltage_ai_MainActivity_nativeLoadModel(
     mtmd_log_set(volt_mtmd_log_cb, nullptr);
 
     auto mparams = llama_model_default_params();
+    mparams.use_mmap = true;
     g_model = llama_model_load_from_file(path, mparams);
     env->ReleaseStringUTFChars(jpath, path);
     if (!g_model) return JNI_FALSE;
 
+    // Ограничиваем потоки генерации 4 быстрыми ядрами (Cortex-A710), чтобы слабые ядра не тормозили синхронизацию
+    int genThreads = std::max(1, std::min((int)threads, 4));
+    int batchThreads = std::max(genThreads, std::min((int)threads, 6));
+
     auto cparams = llama_context_default_params();
     cparams.n_ctx = nCtx > 0 ? nCtx : 4096;
-    cparams.n_batch = 2048;
-    cparams.n_ubatch = 2048;
-    cparams.n_threads = threads;
-    cparams.n_threads_batch = threads;
+    cparams.n_batch = 512;
+    cparams.n_ubatch = 512;
+    cparams.n_threads = genThreads;
+    cparams.n_threads_batch = batchThreads;
+    cparams.type_k = GGML_TYPE_Q8_0;
+    cparams.type_v = GGML_TYPE_Q8_0;
+
     g_ctx = llama_init_from_model(g_model, cparams);
     if (!g_ctx) return JNI_FALSE;
 
@@ -102,7 +113,7 @@ Java_com_voltage_ai_MainActivity_nativeLoadModel(
         if (mmpath && mmpath[0] != '\0') {
             auto mctx_params = mtmd_context_params_default();
             mctx_params.use_gpu = false;
-            mctx_params.n_threads = threads;
+            mctx_params.n_threads = batchThreads;
             g_mtmd = mtmd_init_from_file(mmpath, g_model, mctx_params);
         }
         env->ReleaseStringUTFChars(jmmproj, mmpath);
@@ -142,12 +153,14 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
 
     const llama_vocab* vocab = llama_model_get_vocab(g_model);
     auto t_start = std::chrono::steady_clock::now();
-    llama_memory_clear(llama_get_memory(g_ctx), true);
 
     int visionState = 0;
     llama_pos n_past = 0;
 
     if (jrgbBytes != nullptr && imgW > 0 && imgH > 0) {
+        llama_memory_clear(llama_get_memory(g_ctx), true);
+        g_cached_tokens.clear();
+
         if (g_mtmd == nullptr) {
             visionState = -1;
             if (g_lastMtmdErr.empty()) g_lastMtmdErr = "mmproj не инициализирован";
@@ -171,10 +184,17 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
                     size_t pos = userHistory.rfind("<|im_start|>user\n");
                     if (pos != std::string::npos) {
                         prefix += userHistory.substr(0, pos + 17);
-                        suffix = "\n" + userHistory.substr(pos + 17) + "<|im_start|>assistant\n";
+                        std::string tail = userHistory.substr(pos + 17);
+                        size_t endPos = tail.rfind("<|im_end|>");
+                        if (endPos != std::string::npos) {
+                            tail.insert(endPos, "\n(Ответь на русском языке)");
+                        } else {
+                            tail += "\n(Ответь на русском языке)";
+                        }
+                        suffix = "\n" + tail + "<|im_start|>assistant\n";
                     } else {
                         prefix += "<|im_start|>user\n";
-                        suffix = "\n" + userHistory + "<|im_end|>\n<|im_start|>assistant\n";
+                        suffix = "\n" + userHistory + "\n(Ответь на русском языке)<|im_end|>\n<|im_start|>assistant\n";
                     }
 
                     mtmd_input_chunks* chunks = mtmd_input_chunks_init();
@@ -207,7 +227,6 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
     }
 
     if (visionState != 1) {
-        llama_memory_clear(llama_get_memory(g_ctx), true);
         std::string prompt;
         if (userHistory.find("<|im_start|>") != std::string::npos) {
             prompt = "<|im_start|>system\n" + sysStr + "<|im_end|>\n" + userHistory + "<|im_start|>assistant\n";
@@ -220,18 +239,44 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
         if (n_tokens < 0) return;
         tokens.resize(n_tokens);
 
-        llama_batch batch = llama_batch_init(tokens.size(), 0, 1);
-        batch.n_tokens = tokens.size();
-        for (size_t i = 0; i < tokens.size(); i++) {
-            batch.token[i] = tokens[i];
-            batch.pos[i] = i;
-            batch.n_seq_id[i] = 1;
-            batch.seq_id[i][0] = 0;
-            batch.logits[i] = (i == tokens.size() - 1);
+        // Находим общий префикс с прошлым ходом, чтобы не пересчитывать весь чат заново
+        size_t common_prefix = 0;
+        size_t max_common = std::min(g_cached_tokens.size(), tokens.size() > 0 ? tokens.size() - 1 : 0);
+        while (common_prefix < max_common && g_cached_tokens[common_prefix] == tokens[common_prefix]) {
+            common_prefix++;
         }
-        int decRes = llama_decode(g_ctx, batch);
-        llama_batch_free(batch);
-        if (decRes != 0) return;
+
+        llama_memory_t mem = llama_get_memory(g_ctx);
+        if (common_prefix == 0) {
+            llama_memory_clear(mem, true);
+        } else {
+            llama_memory_seq_rm(mem, 0, (llama_pos)common_prefix, -1);
+        }
+
+        size_t eval_count = tokens.size() - common_prefix;
+        int32_t max_batch = (int32_t)llama_n_batch(g_ctx);
+
+        for (size_t offset = 0; offset < eval_count; offset += max_batch) {
+            size_t chunk_len = std::min((size_t)max_batch, eval_count - offset);
+            llama_batch batch = llama_batch_init((int32_t)chunk_len, 0, 1);
+            batch.n_tokens = (int32_t)chunk_len;
+            for (size_t j = 0; j < chunk_len; j++) {
+                size_t idx = common_prefix + offset + j;
+                batch.token[j] = tokens[idx];
+                batch.pos[j] = (llama_pos)idx;
+                batch.n_seq_id[j] = 1;
+                batch.seq_id[j][0] = 0;
+                batch.logits[j] = (idx == tokens.size() - 1);
+            }
+            int decRes = llama_decode(g_ctx, batch);
+            llama_batch_free(batch);
+            if (decRes != 0) {
+                g_cached_tokens.clear();
+                return;
+            }
+        }
+
+        g_cached_tokens = tokens;
         n_past = (llama_pos)tokens.size();
     }
 
@@ -284,6 +329,10 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
             break;
         }
         llama_sampler_accept(smpl, id);
+
+        if (visionState != 1) {
+            g_cached_tokens.push_back(id);
+        }
 
         if (recent_tokens.size() >= 64) {
             recent_tokens.erase(recent_tokens.begin());
