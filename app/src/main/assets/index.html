@@ -555,21 +555,24 @@ window.onDownloadError = (id, err) => {
   document.getElementById('act-' + id).innerHTML = '<div style="color:#f28b82;font-size:12px;margin-top:8px">Ошибка: ' + err + '</div>';
 };
 
+let pendingModelId = null;
 function activateModel(id) {
   const m = models.find(x => x.id === id);
   if (!m) return;
+  pendingModelId = id;
   document.getElementById('curModelName').innerText = 'Загрузка ' + m.name + '...';
   closeSheets();
   VoltAndroid.loadModel(id, cfg.threads, cfg.ctx);
 }
 window.onModelLoaded = (id, ok) => {
+  if (pendingModelId && id !== pendingModelId) return;
   const m = models.find(x => x.id === id);
   if (ok && m) {
     activeId = id;
     document.getElementById('curModelName').innerText = m.name;
     renderCurrentChat();
     renderModels();
-  } else {
+  } else if (!activeId) {
     document.getElementById('curModelName').innerText = 'Ошибка загрузки в RAM';
   }
 };

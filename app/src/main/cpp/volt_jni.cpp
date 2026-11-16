@@ -290,7 +290,7 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
     int32_t n_vocab = llama_vocab_n_tokens(vocab);
     std::vector<llama_token> recent_tokens;
     recent_tokens.reserve(64);
-    const float repeat_penalty = 1.15f;
+    const float repeat_penalty = 1.07f;
 
     int generated = 0;
     int limit = maxTokens > 0 ? maxTokens : 1024;
