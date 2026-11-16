@@ -207,12 +207,10 @@ class MainActivity : AppCompatActivity() {
 
             val supported = JSONArray().apply {
                 put(JSONObject().put("tier", "Volt Ion v2.5 • 1.5B Fast").put("quant", "Qwen 2.5 1.5B • Текст и файлы").put("status", "Максимальная скорость"))
+                put(JSONObject().put("tier", "Volt Neutron v2.5 • 1.5B Uncensored").put("quant", "Qwen 2.5 1.5B Abliterated • RP / Без фильтров").put("status", "Свободный диалог"))
                 put(JSONObject().put("tier", "Volt Photon v2.0 • 2B Vision").put("quant", "Qwen2-VL 2B + mmproj FP16").put("status", "Субфлагман (фото + текст)"))
                 if (totalGb >= 7.5) {
                     put(JSONObject().put("tier", "Volt Plasma v2.5 • 3B Vision").put("quant", "Qwen2.5-VL 3B + mmproj Q8_0").put("status", if (hasDotProd) "Флагман (ускорение DotProd)" else "Флагман"))
-                }
-                if (totalGb >= 11.0) {
-                    put(JSONObject().put("tier", "7B • Experimental").put("quant", "IQ4_XS / Q4_K_M").put("status", "При >4.5 ГБ свободной RAM"))
                 }
             }
 
@@ -323,7 +321,7 @@ class MainActivity : AppCompatActivity() {
                         val clean = imgBase64.substringAfter(",")
                         val bytes = Base64.decode(clean, Base64.DEFAULT)
                         val rawBmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        val maxSide = 448
+                        val maxSide = 336
                         val scale = minOf(maxSide.toFloat() / rawBmp.width, maxSide.toFloat() / rawBmp.height, 1.0f)
                         val targetW = maxOf(28, (((rawBmp.width * scale).toInt() + 14) / 28) * 28)
                         val targetH = maxOf(28, (((rawBmp.height * scale).toInt() + 14) / 28) * 28)
