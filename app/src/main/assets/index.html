@@ -667,7 +667,18 @@ function send() {
         : '<|im_start|>assistant\n' + m.text + '<|im_end|>\n'
     ).join('');
     const fullSysPrompt = buildSystemPrompt(activeModelObj);
-    VoltAndroid.sendPrompt(recent, fullSysPrompt, visionDataUrl, cfg.temp, cfg.topP, cfg.maxTokens);
+    if (agentMode) {
+      const chatObj = chats.find(x => x.id === currentChatId);
+      const lastUserMsg = chatObj ? chatObj.messages.slice().reverse().find(m => m.role === 'user') : null;
+      agentGoal = lastUserMsg ? lastUserMsg.text : '';
+      agentStep = 1;
+      agentHistory = [];
+      const screenInfo = (VoltAndroid.getScreenUiState) ? VoltAndroid.getScreenUiState() : '';
+      const agentPrompt = `<|im_start|>user\nЦель: ${agentGoal}\nШаг ${agentStep}/${MAX_AGENT_STEPS}.\n${screenInfo}<|im_end|>\n<|im_start|>assistant\n`;
+      VoltAndroid.sendPrompt(agentPrompt, AGENT_SYS_PROMPT, '', 0.1, cfg.topP, 96);
+    } else {
+      VoltAndroid.sendPrompt(recent, fullSysPrompt, visionDataUrl, cfg.temp, cfg.topP, cfg.maxTokens);
+    }
   } catch (err) {
     setGenerating(false);
     alert('Ошибка отправки: ' + err.message);
@@ -700,6 +711,39 @@ window.onVoltStats = (tokens, tps, totalSec, visionState, visionErr) => {
 
 window.onVoltDone = () => {
   const c = chats.find(x => x.id === currentChatId);
+  if (agentMode && c && rawStream) {
+    const match = rawStream.match(/\{[\s\S]*"action"[\s\S]*\}/);
+    if (match) {
+      try {
+        const cmd = JSON.parse(match[0]);
+        if (cmd.action === 'done' || agentStep >= MAX_AGENT_STEPS) {
+          const finalMsg = rawStream + '\n\n✅ Агент завершил: ' + (cmd.target || 'Задача выполнена');
+          if (activeBotEl) activeBotEl.innerText = finalMsg;
+          c.messages.push({ role: 'assistant', text: finalMsg, stats: lastStatsStr });
+          saveChats();
+          setGenerating(false);
+          activeBotEl = null;
+          activeStatsEl = null;
+          return;
+        }
+        const execRes = VoltAndroid.executeAgentAction(match[0]);
+        agentHistory.push(`Шаг ${agentStep}: ${cmd.action}(${cmd.target}) -> ${execRes}`);
+        const stepLog = `⚡ [Шаг ${agentStep}] ${execRes}`;
+        if (activeBotEl) activeBotEl.innerText = rawStream + '\n' + stepLog;
+        c.messages.push({ role: 'assistant', text: rawStream + '\n' + stepLog, stats: lastStatsStr });
+        saveChats();
+        agentStep++;
+        setTimeout(() => {
+          const nextScreen = (VoltAndroid.getScreenUiState) ? VoltAndroid.getScreenUiState() : '';
+          const nextPrompt = `<|im_start|>user\nЦель: ${agentGoal}\nВыполненные шаги:\n${agentHistory.join('\n')}\n\nШаг ${agentStep}/${MAX_AGENT_STEPS}. Текущий экран:\n${nextScreen}<|im_end|>\n<|im_start|>assistant\n`;
+          rawStream = '';
+          if (typeof appendBotPlaceholder === 'function') appendBotPlaceholder();
+          VoltAndroid.sendPrompt(nextPrompt, AGENT_SYS_PROMPT, '', 0.1, cfg.topP, 96);
+        }, 1300);
+        return;
+      } catch (e) {}
+    }
+  }
   if (c && rawStream) {
     c.messages.push({ role: 'assistant', text: rawStream, stats: lastStatsStr });
     saveChats();
