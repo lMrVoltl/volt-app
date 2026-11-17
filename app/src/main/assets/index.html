@@ -124,6 +124,25 @@ body.light-theme .stats-bar { background: #ebe8e0; color: #2b59c3; }
 .act-meta { font-size: 11.5px; color: var(--sub, #9aa0a6); text-align: center; line-height: 1.55; }
 .msg-u, .msg-a { cursor: pointer; }
 
+
+.fam-card { background: var(--card,#1e1f22); border: 1px solid var(--bdr,#333538); border-radius: 16px; padding: 14px; margin-top: 12px; }
+.fam-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.fam-title { font-size: 15.5px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fam-arrow {
+  background: var(--surf,#282a2c); border: 1px solid var(--bdr,#3c4043); color: var(--txt,#e3e3e3);
+  border-radius: 10px; padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.fam-desc { font-size: 12.5px; color: var(--sub,#9aa0a6); margin-top: 5px; line-height: 1.4; }
+.ver-drawer { display: none; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--bdr,#333538); }
+.ver-drawer.open { display: block; }
+.ver-item { background: var(--surf,#282a2c); border-radius: 12px; padding: 10px 12px; margin-top: 8px; border: 1px solid var(--bdr,#3c4043); }
+.prog-wrap { width: 100%; height: 8px; background: #141517; border-radius: 99px; overflow: hidden; margin-top: 6px; }
+.prog-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #4285f4, #a8c7fa); transition: width .2s ease; }
+.btn-del {
+  background: rgba(242,139,130,.15); color: #f28b82; border: 1px solid rgba(242,139,130,.35);
+  border-radius: 10px; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+
 </style>
 </head>
 <body>
@@ -621,37 +640,148 @@ window.onCatalogError = (err) => {
   document.getElementById('modelsList').innerHTML = '<div>Ошибка: ' + err + '</div><button class="btn" onclick="VoltAndroid.fetchCatalog()">Повторить</button>';
 };
 
+let expandedFamilies = {};
+
+function toggleFamilyDrawer(famKey) {
+  expandedFamilies[famKey] = !expandedFamilies[famKey];
+  renderModels();
+}
+
+function deleteModelUi(id, name) {
+  if (!confirm('Удалить файлы модели ' + name + ' из памяти устройства?')) return;
+  if (window.VoltAndroid && VoltAndroid.deleteModel && VoltAndroid.deleteModel(id)) {
+    const m = models.find(x => x.id === id);
+    if (m) m.downloaded = false;
+    if (id.startsWith('custom-')) {
+      models = models.filter(x => x.id !== id);
+    }
+    if (activeId === id) {
+      activeId = '';
+      const lbl = document.getElementById('activeModelName');
+      if (lbl) lbl.innerText = 'Выбери модель';
+    }
+    renderModels();
+  }
+}
+
 function renderModels() {
   const box = document.getElementById('modelsList');
   box.innerHTML = '';
-  const rec = [...models].reverse().find(m => freeRamMb >= m.min_free_ram_mb) || models[0];
+
+  const famDescMap = {
+    'Volt Plasma': 'Мультимодальный ИИ: анализ фото, конспектов и глубокий диалог',
+    'Volt Neutron': 'Универсальный интеллект для логики, кода, учёбы и сложных текстов',
+    'Volt Ion': 'Сбалансированная модель для быстрых повседневных задач без нагрузки',
+    'Volt Photon': 'Сверхлёгкая модель для мгновенных ответов и базового зрения'
+  };
+
+  const familiesMap = new Map();
   models.forEach(m => {
-    const isRec = rec && rec.id === m.id;
-    const isAct = activeId === m.id;
-    const div = document.createElement('div');
-    div.className = 'card';
-    div.style.marginTop = '12px';
-    div.innerHTML = (isRec ? '<div class="badge">Рекомендовано для устройства</div>' : '') +
-      (m.uncensored ? '<div class="badge unc">Без цензуры</div>' : '') +
-      '<div style="display:flex;justify-content:space-between"><b>' + m.name + '</b><span style="font-size:12px;color:var(--sub)">' + m.params + ' • ' + m.size_mb + ' МБ</span></div>' +
-      '<div style="font-size:11.5px;color:var(--acc);margin-top:2px">' + (m.base_model || '') + '</div>' +
-      '<div style="font-size:13px;color:var(--sub);margin-top:4px">' + m.description + '</div>' +
-      '<div id="act-' + m.id + '">' +
-      (m.downloaded
-        ? '<button class="btn ' + (isAct ? 'sec' : '') + '" onclick="activateModel(\'' + m.id + '\')">' + (isAct ? 'Активна' : 'Запустить модель') + '</button>'
-        : '<button class="btn" onclick="startDownload(\'' + m.id + '\',\'' + m.download_url + '\',\'' + (m.mmproj_url || '') + '\')">Скачать (' + m.size_mb + ' МБ)</button>') +
-      '</div>';
-    box.appendChild(div);
+    let fam = m.family;
+    if (!fam) {
+      if (m.name.startsWith('Volt Plasma')) fam = 'Volt Plasma';
+      else if (m.name.startsWith('Volt Neutron')) fam = 'Volt Neutron';
+      else if (m.name.startsWith('Volt Ion')) fam = 'Volt Ion';
+      else if (m.name.startsWith('Volt Photon')) fam = 'Volt Photon';
+      else fam = m.name.replace(/\s+v?\d+(\.\d+)?.*$/i, '').trim();
+    }
+    if (!familiesMap.has(fam)) {
+      familiesMap.set(fam, {
+        family: fam,
+        desc: m.family_desc || famDescMap[fam] || m.description,
+        items: []
+      });
+    }
+    familiesMap.get(fam).items.push(m);
+  });
+
+  familiesMap.forEach((group, fam) => {
+    const items = group.items;
+    const activeInFam = items.find(x => x.id === activeId);
+    const downloadedItems = items.filter(x => x.downloaded);
+    const primary = activeInFam || downloadedItems[downloadedItems.length - 1] || items[items.length - 1];
+    const isOpen = !!expandedFamilies[fam];
+
+    const card = document.createElement('div');
+    card.className = 'fam-card';
+
+    const arrowHtml = items.length > 1
+      ? '<button type="button" class="fam-arrow" onclick="toggleFamilyDrawer(\'' + fam.replace(/'/g, "\\'") + '\')">Версии (' + items.length + ') ' + (isOpen ? '▴' : '⌄') + '</button>'
+      : '';
+
+    const statusBadge = activeInFam
+      ? '<span style="font-size:11px;background:rgba(129,201,149,.18);color:#81c995;padding:2px 7px;border-radius:6px">● ' + (activeInFam.version || activeInFam.params) + '</span>'
+      : (downloadedItems.length ? '<span style="font-size:11px;color:var(--acc)">Скачано: ' + downloadedItems.length + '</span>' : '');
+
+    let primaryBtnHtml = '';
+    if (primary.downloaded) {
+      primaryBtnHtml = '<div style="display:flex;gap:8px;margin-top:10px">' +
+        '<button class="btn ' + (activeId === primary.id ? 'sec' : '') + '" style="flex:1;margin-top:0" onclick="activateModel(\'' + primary.id + '\')">' +
+        (activeId === primary.id ? ('Активна (' + (primary.version || primary.params) + ')') : ('Запустить ' + (primary.version || primary.name))) + '</button>' +
+        '<button type="button" class="btn-del" onclick="deleteModelUi(\'' + primary.id + '\',\'' + primary.name + '\')">🗑</button>' +
+        '</div>';
+    } else {
+      primaryBtnHtml = '<div id="act-' + primary.id + '" style="margin-top:10px">' +
+        '<button class="btn" style="margin-top:0" onclick="startDownload(\'' + primary.id + '\',\'' + primary.download_url + '\',\'' + (primary.mmproj_url || '') + '\')">Скачать ' + (primary.version || '') + ' (' + primary.size_mb + ' МБ)</button>' +
+        '</div>';
+    }
+
+    let drawerHtml = '<div class="ver-drawer ' + (isOpen ? 'open' : '') + '">';
+    items.forEach(v => {
+      const vAct = activeId === v.id;
+      drawerHtml += '<div class="ver-item">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center"><b>' + v.name + '</b><span style="font-size:11.5px;color:var(--sub)">' + v.params + ' • ' + v.size_mb + ' МБ</span></div>' +
+        '<div style="font-size:11.5px;color:var(--acc);margin-top:2px">' + (v.base_model || '') + '</div>' +
+        '<div style="font-size:12px;color:var(--sub);margin-top:3px">' + v.description + '</div>' +
+        '<div id="act-ver-' + v.id + '" style="margin-top:8px">' +
+        (v.downloaded
+          ? '<div style="display:flex;gap:8px">' +
+              '<button class="btn ' + (vAct ? 'sec' : '') + '" style="flex:1;margin-top:0;padding:8px" onclick="activateModel(\'' + v.id + '\')">' + (vAct ? '✓ Активна' : 'Выбрать и запустить') + '</button>' +
+              '<button type="button" class="btn-del" onclick="deleteModelUi(\'' + v.id + '\',\'' + v.name + '\')">🗑 Удалить</button>' +
+            '</div>'
+          : '<button class="btn" style="margin-top:0;padding:8px" onclick="startDownload(\'' + v.id + '\',\'' + v.download_url + '\',\'' + (v.mmproj_url || '') + '\')">⬇ Скачать (' + v.size_mb + ' МБ)</button>') +
+        '</div></div>';
+    });
+    drawerHtml += '</div>';
+
+    card.innerHTML =
+      '<div class="fam-head"><div class="fam-title">' + fam + ' ' + statusBadge + '</div>' + arrowHtml + '</div>' +
+      '<div class="fam-desc">' + group.desc + '</div>' +
+      primaryBtnHtml +
+      drawerHtml;
+
+    box.appendChild(card);
   });
 }
 
 function startDownload(id, url, mmUrl) {
-  document.getElementById('act-' + id).innerHTML = '<button class="btn sec" disabled id="prog-' + id + '">Скачивание: 0%</button>';
+  const m = models.find(x => x.id === id);
+  const totalMb = m ? m.size_mb : 0;
+  const barHtml =
+    '<div style="font-size:12px;color:var(--acc);display:flex;justify-content:space-between">' +
+      '<span id="prog-txt-' + id + '">Загрузка... 0%</span>' +
+      '<span id="prog-mb-' + id + '">0 / ' + totalMb + ' МБ</span>' +
+    '</div>' +
+    '<div class="prog-wrap"><div class="prog-fill" id="prog-fill-' + id + '"></div></div>';
+
+  const el1 = document.getElementById('act-' + id);
+  const el2 = document.getElementById('act-ver-' + id);
+  if (el1) el1.innerHTML = barHtml;
+  if (el2) el2.innerHTML = barHtml;
   VoltAndroid.downloadModel(id, url, mmUrl || '');
 }
 window.onDownloadProgress = (id, pct) => {
-  const el = document.getElementById('prog-' + id);
-  if (el) el.innerText = 'Скачивание: ' + pct + '%';
+  const m = models.find(x => x.id === id);
+  const totalMb = m ? m.size_mb : 0;
+  const curMb = Math.round((totalMb * pct) / 100);
+  ['', '-ver'].forEach(suf => {
+    const t = document.querySelector('#act' + suf + '-' + id + ' #prog-txt-' + id);
+    const mb = document.querySelector('#act' + suf + '-' + id + ' #prog-mb-' + id);
+    const f = document.querySelector('#act' + suf + '-' + id + ' #prog-fill-' + id);
+    if (t) t.innerText = 'Загрузка... ' + pct + '%';
+    if (mb && totalMb > 0) mb.innerText = curMb + ' / ' + totalMb + ' МБ';
+    if (f) f.style.width = pct + '%';
+  });
 };
 window.onDownloadDone = (id) => {
   const m = models.find(x => x.id === id);
@@ -660,7 +790,11 @@ window.onDownloadDone = (id) => {
   activateModel(id);
 };
 window.onDownloadError = (id, err) => {
-  document.getElementById('act-' + id).innerHTML = '<div style="color:#f28b82;font-size:12px;margin-top:8px">Ошибка: ' + err + '</div>';
+  const errHtml = '<div style="color:#f28b82;font-size:12px;margin-top:6px">Ошибка: ' + err + '</div>';
+  const el1 = document.getElementById('act-' + id);
+  const el2 = document.getElementById('act-ver-' + id);
+  if (el1) el1.innerHTML = errHtml;
+  if (el2) el2.innerHTML = errHtml;
 };
 
 function importLocalModel() {

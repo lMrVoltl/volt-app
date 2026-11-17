@@ -180,8 +180,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun downloadSingleFile(urlStr: String, target: File, progressStart: Int, progressSpan: Int, id: String) {
         val tmp = File(target.parentFile, target.name + ".part")
+        val dlClient = client.newBuilder().readTimeout(0, TimeUnit.SECONDS).writeTimeout(0, TimeUnit.SECONDS).callTimeout(0, TimeUnit.SECONDS).build()
         val req = Request.Builder().url(urlStr).build()
-        client.newCall(req).execute().use { resp ->
+        dlClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
             val body = resp.body ?: throw Exception("Нет данных")
             val total = body.contentLength()
@@ -369,7 +370,7 @@ class MainActivity : AppCompatActivity() {
                   "min_free_ram_mb": 4800,
                   "vision": false,
                   "description": "Полноценная 7B-модель: глубокая логика, точные факты, сильный русский язык и код",
-                  "download_url": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf",
+                  "download_url": "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
                   "mmproj_url": ""
                 },
                 {
@@ -395,11 +396,11 @@ class MainActivity : AppCompatActivity() {
                   "name": "Volt Plasma v3.0",
                   "base_model": "Qwen2.5-VL-7B-Instruct (Q4_K_M)",
                   "params": "7B + Vision",
-                  "size_mb": 5450,
-                  "min_free_ram_mb": 5600,
+                  "size_mb": 3820,
+                  "min_free_ram_mb": 4200,
                   "vision": true,
                   "description": "Старший флагман: высокая точность понимания сложных снимков, конспектов и рассуждений",
-                  "download_url": "https://huggingface.co/ggml-org/Qwen2.5-VL-7B-Instruct-GGUF/resolve/main/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
+                  "download_url": "https://huggingface.co/ggml-org/Qwen2.5-VL-7B-Instruct-GGUF/resolve/main/Qwen2.5-VL-7B-Instruct-Q3_K_M.gguf",
                   "mmproj_url": "https://huggingface.co/ggml-org/Qwen2.5-VL-7B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-7B-Instruct-f16.gguf"
                 }
               ]
