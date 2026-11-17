@@ -635,7 +635,7 @@ class MainActivity : AppCompatActivity() {
                     val client = try { srv.accept() } catch (_: Exception) { break }
                     thread { handleOpenAiClient(client) }
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 isApiServerRunning = false
             }
         }
@@ -667,25 +667,23 @@ class MainActivity : AppCompatActivity() {
             }
 
             val out = OutputStreamWriter(socket.getOutputStream(), "UTF-8")
+            val nl = "\r\n"
             if (requestLine.startsWith("OPTIONS ")) {
-                out.write("HTTP/1.1 204 No Content
-Access-Control-Allow-Origin: *
-Access-Control-Allow-Methods: GET, POST, OPTIONS
-Access-Control-Allow-Headers: *
-
-")
+                out.write("HTTP/1.1 204 No Content${nl}Access-Control-Allow-Origin: *${nl}Access-Control-Allow-Methods: GET, POST, OPTIONS${nl}Access-Control-Allow-Headers: *${nl}${nl}")
                 out.flush()
                 return
             }
 
             if (requestLine.contains("/v1/models")) {
-                val modelsJson = "{"object":"list","data":[{"id":"volt-local","object":"model","owned_by":"VOLTAGE"}]}"
-                out.write("HTTP/1.1 200 OK
-Content-Type: application/json; charset=utf-8
-Access-Control-Allow-Origin: *
-Content-Length: ${modelsJson.toByteArray().size}
-
-$modelsJson")
+                val modelsJson = JSONObject().apply {
+                    put("object", "list")
+                    put("data", JSONArray().put(JSONObject().apply {
+                        put("id", "volt-local")
+                        put("object", "model")
+                        put("owned_by", "VOLTAGE")
+                    }))
+                }.toString()
+                out.write("HTTP/1.1 200 OK${nl}Content-Type: application/json; charset=utf-8${nl}Access-Control-Allow-Origin: *${nl}Content-Length: ${modelsJson.toByteArray().size}${nl}${nl}$modelsJson")
                 out.flush()
                 return
             }
@@ -703,24 +701,23 @@ $modelsJson")
                     val role = m.optString("role", "user")
                     val content = m.optString("content", "")
                     if (role == "system") sysPrompt = content
-                    else chatSb.append("<|im_start|>").append(role).append("
-").append(content).append("<|im_end|>
-")
+                    else chatSb.append("<|im_start|>").append(role).append("\n").append(content).append("<|im_end|>\n")
                 }
-                chatSb.append("<|im_start|>assistant
-")
+                chatSb.append("<|im_start|>assistant\n")
 
                 synchronized(this) {
                     apiStreamBuffer = StringBuilder()
                     val latch = CountDownLatch(1)
                     apiGenerationLatch = latch
-                    sendPrompt(chatSb.toString(), sysPrompt, "", temp, topP, maxTok)
-                    latch.await(110, TimeUnit.SECONDS)
+                    promptStartTimeMs = System.currentTimeMillis()
+                    firstTokenTimeMs = 0L
+                    nativeGenerate(chatSb.toString(), sysPrompt, null, 0, 0, temp, topP, maxTok)
+                    apiGenerationLatch?.countDown()
                     apiGenerationLatch = null
                 }
 
                 val replyText = apiStreamBuffer.toString().trim()
-                val respObj = JSONObject().apply {
+                val respStr = JSONObject().apply {
                     put("id", "chatcmpl-volt-${System.currentTimeMillis()}")
                     put("object", "chat.completion")
                     put("created", System.currentTimeMillis() / 1000)
@@ -733,22 +730,12 @@ $modelsJson")
                         })
                         put("finish_reason", "stop")
                     }))
-                }
-                val respStr = respObj.toString()
-                out.write("HTTP/1.1 200 OK
-Content-Type: application/json; charset=utf-8
-Access-Control-Allow-Origin: *
-Content-Length: ${respStr.toByteArray().size}
-
-$respStr")
+                }.toString()
+                out.write("HTTP/1.1 200 OK${nl}Content-Type: application/json; charset=utf-8${nl}Access-Control-Allow-Origin: *${nl}Content-Length: ${respStr.toByteArray().size}${nl}${nl}$respStr")
                 out.flush()
             } else {
-                val err = "{"error":"Unsupported endpoint"}"
-                out.write("HTTP/1.1 404 Not Found
-Content-Type: application/json
-Content-Length: ${err.length}
-
-$err")
+                val err = JSONObject().put("error", "Unsupported endpoint").toString()
+                out.write("HTTP/1.1 404 Not Found${nl}Content-Type: application/json${nl}Content-Length: ${err.length}${nl}${nl}$err")
                 out.flush()
             }
         } catch (_: Exception) {
@@ -756,5 +743,4 @@ $err")
             try { socket.close() } catch (_: Exception) {}
         }
     }
-
 }
