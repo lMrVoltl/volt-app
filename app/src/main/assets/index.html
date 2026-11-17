@@ -77,6 +77,53 @@
   select,textarea.sys-inp{width:100%;background:var(--surf);color:var(--txt);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px 12px;font-size:14px;outline:none}
 .agent-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:14px;font-size:12px;font-weight:600;background:#282a2c;color:var(--sub);border:1px solid #3c4043;cursor:pointer;margin-bottom:6px;transition:.15s}
 .agent-pill.on{background:rgba(168,199,250,.18);color:#a8c7fa;border-color:#a8c7fa}
+
+body.light-theme {
+  --bg: #f6f4ef;
+  --surf: #ebe8e0;
+  --card: #ffffff;
+  --txt: #1c1b18;
+  --sub: #6b685f;
+  --acc: #2b59c3;
+  --bdr: #dcd8ce;
+}
+body.light-theme .msg-u { background: #e3dfd5; color: #1c1b18; }
+body.light-theme .bot-txt { color: #1c1b18; }
+body.light-theme .input-pill { background: #ebe8e0; border-color: #d5d0c5; }
+body.light-theme .stats-bar { background: #ebe8e0; color: #2b59c3; }
+
+.msg-act-sheet {
+  position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 9999;
+  display: none; align-items: flex-end; justify-content: center;
+}
+.msg-act-sheet.open { display: flex; }
+.msg-act-box {
+  width: 100%; max-width: 520px; background: var(--card, #1e1f22); color: var(--txt, #e3e3e3);
+  border-radius: 22px 22px 0 0; padding: 12px 16px 22px; box-shadow: 0 -8px 32px rgba(0,0,0,.45);
+  animation: slideUp .18s ease-out;
+}
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.sheet-grab { width: 38px; height: 4px; background: #666; border-radius: 4px; margin: 0 auto 14px; }
+.act-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+.act-tile {
+  background: var(--surf, #282a2c); border: 1px solid var(--bdr, #3c4043); border-radius: 14px;
+  padding: 10px 4px; text-align: center; font-size: 11.5px; font-weight: 600; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+}
+.act-tile span.ico { font-size: 18px; }
+.act-list {
+  background: var(--surf, #282a2c); border: 1px solid var(--bdr, #3c4043); border-radius: 14px;
+  overflow: hidden; margin-bottom: 12px;
+}
+.act-item {
+  padding: 12px 14px; font-size: 13.5px; display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--bdr, #333538); cursor: pointer;
+}
+.act-item:last-child { border-bottom: none; }
+.act-item.danger { color: #f28b82; }
+.act-meta { font-size: 11.5px; color: var(--sub, #9aa0a6); text-align: center; line-height: 1.55; }
+.msg-u, .msg-a { cursor: pointer; }
+
 </style>
 </head>
 <body>
@@ -215,6 +262,21 @@
       <div class="card">
         <div class="set-row" style="display:flex;justify-content:space-between;align-items:center">
           <div>
+            <div style="font-size:13.5px">Светлая кремовая тема (LocalMind)</div>
+            <div class="set-hint">Переключение между тёмной VOLTAGE и светлой палитрой</div>
+          </div>
+          <input type="checkbox" id="setLightTheme" style="width:20px;height:20px;accent-color:var(--acc)" onchange="toggleThemeMode(this.checked)">
+        </div>
+        <div class="set-row">
+          <div class="set-head"><span>Локальный OpenAI API-сервер (Telegram)</span><b id="srvStatusBadge" style="color:#9aa0a6">○ Остановлен</b></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+            <button type="button" id="srvToggleBtn" onclick="toggleLocalServerUi()" style="flex:1;padding:9px 12px;border-radius:10px;border:none;background:var(--acc,#a8c7fa);color:#062e6f;font-weight:700;cursor:pointer">Запустить сервер :8080</button>
+            <button type="button" onclick="copyServerUrl()" style="padding:9px 12px;border-radius:10px;border:1px solid #3c4043;background:var(--surf,#282a2c);color:var(--txt,#e3e3e3);font-size:12px;cursor:pointer">📋 URL</button>
+          </div>
+          <div class="set-hint">Endpoint для ботов и плагинов Telegram: <code>http://127.0.0.1:8080/v1</code></div>
+        </div>
+        <div class="set-row" style="display:flex;justify-content:space-between;align-items:center">
+          <div>
             <div style="font-size:13.5px">Статистика генерации</div>
             <div class="set-hint">Скорость (ток/с), токены и бейдж Vision под ответом</div>
           </div>
@@ -223,6 +285,7 @@
         <div class="set-row">
           <div class="set-head"><span>Стиль ответов нейросети</span></div>
           <div class="preset-row">
+            <button type="button" class="preset-btn" onclick="applyPreset('turbo')">⚡ Турбо (&lt;1s TTFT)</button>
             <button type="button" class="preset-chip" onclick="applyPreset('std')">Стандарт</button>
             <button type="button" class="preset-chip" onclick="applyPreset('free')">Свободный чат</button>
           </div>
@@ -465,10 +528,11 @@ function renderCurrentChat() {
     return;
   }
   box.innerHTML = '';
-  c.messages.forEach(m => {
+  c.messages.forEach((m, idx) => {
     if (m.role === 'user') {
       const u = document.createElement('div');
       u.className = 'msg-u';
+      u.onclick = () => openMsgSheet(idx);
       let html = '';
       if (m.img) html += '<img src="' + m.img + '">';
       else if (m.hadImg) html += '<div class="att-tag">🖼 Изображение</div><br>';
@@ -479,6 +543,7 @@ function renderCurrentChat() {
     } else {
       const a = document.createElement('div');
       a.className = 'msg-a';
+      a.onclick = () => openMsgSheet(idx);
       const statsHtml = (cfg.showStats && m.stats) ? '<div class="stats-bar">' + m.stats + '</div>' : '';
       a.innerHTML = '<div class="spark">✦</div><div class="bot-wrap"><div class="bot-txt">' + formatMd(m.text) + '</div>' + statsHtml + '</div>';
       box.appendChild(a);
@@ -744,6 +809,15 @@ window.onVoltToken = (tok) => {
 };
 
 window.onVoltStats = (tokens, tps, totalSec, visionState, visionErr) => {
+  const ttftMs = (window.VoltAndroid && VoltAndroid.getLastTtftMs) ? VoltAndroid.getLastTtftMs() : 0;
+  const cCur = chats.find(x => x.id === currentChatId);
+  if (cCur && cCur.messages.length) {
+    const lastM = cCur.messages[cCur.messages.length - 1];
+    lastM.ttftMs = ttftMs;
+    lastM.totalSec = totalSec;
+    lastM.tps = tps;
+    lastM.tokens = tokens;
+  }
   let vTag = '';
   if (visionState === 1) vTag = ' • <span class="v-ok">👁 Vision</span>';
   else if (visionState < 0) vTag = ' • <span class="v-err">⚠️ Vision ' + visionState + (visionErr ? ': ' + visionErr : '') + '</span>';
@@ -794,6 +868,152 @@ window.onVoltDone = () => {
   activeBotEl = null;
   activeStatsEl = null;
 };
+
+let selectedMsgIdx = -1;
+
+function toggleThemeMode(isLight) {
+  cfg.lightTheme = !!isLight;
+  document.body.classList.toggle('light-theme', cfg.lightTheme);
+  localStorage.setItem('volt_cfg', JSON.stringify(cfg));
+}
+if (cfg.lightTheme) {
+  document.body.classList.add('light-theme');
+  const cb = document.getElementById('setLightTheme');
+  if (cb) cb.checked = true;
+}
+
+function updateServerUiState() {
+  const running = (window.VoltAndroid && VoltAndroid.isLocalServerRunning) ? VoltAndroid.isLocalServerRunning() : false;
+  const badge = document.getElementById('srvStatusBadge');
+  const btn = document.getElementById('srvToggleBtn');
+  if (!badge || !btn) return;
+  if (running) {
+    badge.innerText = '● Запущен (:8080)';
+    badge.style.color = '#81c995';
+    btn.innerText = 'Остановить сервер';
+  } else {
+    badge.innerText = '○ Остановлен';
+    badge.style.color = '#9aa0a6';
+    btn.innerText = 'Запустить сервер :8080';
+  }
+}
+
+function toggleLocalServerUi() {
+  if (!window.VoltAndroid || !VoltAndroid.toggleLocalApiServer) return;
+  const running = VoltAndroid.isLocalServerRunning();
+  VoltAndroid.toggleLocalApiServer(!running, 8080);
+  setTimeout(updateServerUiState, 200);
+}
+
+function copyServerUrl() {
+  const url = 'http://127.0.0.1:8080/v1';
+  if (navigator.clipboard) navigator.clipboard.writeText(url);
+  alert('Скопировано: ' + url + '\nКлюч API: volt-local');
+}
+
+const origApplyPreset = applyPreset;
+applyPreset = function(kind) {
+  if (kind === 'turbo') {
+    const sp = document.getElementById('setSysPrompt');
+    if (sp) sp.value = 'Отвечай кратко и по делу на русском языке.';
+    cfg.sysPrompt = 'Отвечай кратко и по делу на русском языке.';
+    localStorage.setItem('volt_cfg', JSON.stringify(cfg));
+    return;
+  }
+  origApplyPreset(kind);
+};
+
+function openMsgSheet(idx) {
+  const c = chats.find(x => x.id === currentChatId);
+  if (!c || !c.messages[idx]) return;
+  selectedMsgIdx = idx;
+  const m = c.messages[idx];
+  const raw = m.role === 'user' ? (m.displayText || '') : (m.text || '');
+  const ttftStr = m.ttftMs ? (m.ttftMs + ' ms') : '—';
+  const durStr = m.totalSec ? (m.totalSec.toFixed(2) + 's') : '—';
+  const tpsStr = m.tps ? (m.tps.toFixed(1) + ' ток/с') : '';
+  document.getElementById('msgSheetMeta').innerHTML =
+    'Время до первого токена <b>' + ttftStr + '</b> • Генерация <b>' + durStr + '</b> ' + tpsStr +
+    '<br>Символы <b>' + raw.length + '</b> • Статус <b>complete</b>';
+  document.getElementById('msgActionSheet').classList.add('open');
+}
+
+function closeMsgSheet() {
+  document.getElementById('msgActionSheet').classList.remove('open');
+}
+
+function msgSheetAction(act) {
+  const c = chats.find(x => x.id === currentChatId);
+  if (!c || selectedMsgIdx < 0 || !c.messages[selectedMsgIdx]) return;
+  const m = c.messages[selectedMsgIdx];
+  const raw = m.role === 'user' ? (m.displayText || '') : (m.text || '');
+  closeMsgSheet();
+
+  if (act === 'copy' || act === 'md') {
+    if (navigator.clipboard) navigator.clipboard.writeText(raw);
+  } else if (act === 'tts') {
+    if (window.VoltAndroid && VoltAndroid.speakText) VoltAndroid.speakText(raw);
+  } else if (act === 'share') {
+    if (navigator.share) navigator.share({ text: raw }).catch(()=>{});
+    else if (navigator.clipboard) navigator.clipboard.writeText(raw);
+  } else if (act === 'delete') {
+    c.messages.splice(selectedMsgIdx, 1);
+    saveChats(); renderCurrentChat();
+  } else if (act === 'fork') {
+    const forkId = 'chat_' + Date.now();
+    const cloned = JSON.parse(JSON.stringify(c.messages.slice(0, selectedMsgIdx + 1)));
+    chats.unshift({ id: forkId, title: '🌿 ' + (c.title || 'Ветка чата'), messages: cloned });
+    currentChatId = forkId;
+    saveChats(); renderChatList(); renderCurrentChat();
+  } else if (act === 'edit') {
+    const edited = prompt('Редактировать сообщение:', raw);
+    if (edited !== null && edited.trim() !== '') {
+      if (m.role === 'user') {
+        c.messages = c.messages.slice(0, selectedMsgIdx);
+        saveChats(); renderCurrentChat();
+        const inp = document.getElementById('prompt');
+        if (inp) { inp.value = edited.trim(); send(); }
+      } else {
+        m.text = edited.trim();
+        saveChats(); renderCurrentChat();
+      }
+    }
+  } else if (act === 'regen') {
+    let userIdx = m.role === 'user' ? selectedMsgIdx : selectedMsgIdx - 1;
+    while (userIdx >= 0 && c.messages[userIdx].role !== 'user') userIdx--;
+    if (userIdx >= 0) {
+      const promptTxt = c.messages[userIdx].displayText || '';
+      c.messages = c.messages.slice(0, userIdx);
+      saveChats(); renderCurrentChat();
+      const inp = document.getElementById('prompt');
+      if (inp) { inp.value = promptTxt; send(); }
+    }
+  } else if (act === 'continue') {
+    const inp = document.getElementById('prompt');
+    if (inp) { inp.value = 'Продолжи свой предыдущий ответ с того места, где остановился.'; send(); }
+  }
+}
+
 </script>
+
+<div class="msg-act-sheet" id="msgActionSheet" onclick="if(event.target===this)closeMsgSheet()">
+  <div class="msg-act-box">
+    <div class="sheet-grab"></div>
+    <div class="act-grid">
+      <div class="act-tile" onclick="msgSheetAction('copy')"><span class="ico">📋</span>Копировать</div>
+      <div class="act-tile" onclick="msgSheetAction('regen')"><span class="ico">🔄</span>Повторить</div>
+      <div class="act-tile" onclick="msgSheetAction('tts')"><span class="ico">🔊</span>Читать вслух</div>
+      <div class="act-tile" onclick="msgSheetAction('share')"><span class="ico">📤</span>Делиться</div>
+    </div>
+    <div class="act-list">
+      <div class="act-item" onclick="msgSheetAction('edit')"><span>✏️</span>Редактировать сообщение</div>
+      <div class="act-item" onclick="msgSheetAction('continue')"><span>▶️</span>Продолжить генерацию</div>
+      <div class="act-item" onclick="msgSheetAction('fork')"><span>🌿</span>Создать ветку чата</div>
+      <div class="act-item" onclick="msgSheetAction('md')"><span>&lt;&gt;</span>Скопировать как Markdown</div>
+      <div class="act-item danger" onclick="msgSheetAction('delete')"><span>🗑</span>Удалить сообщение</div>
+    </div>
+    <div class="act-meta" id="msgSheetMeta">Готово</div>
+  </div>
+</div>
 </body>
 </html>
