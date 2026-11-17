@@ -75,6 +75,8 @@
   .set-hint{font-size:11.5px;color:var(--sub);margin-top:3px}
   input[type=range]{width:100%;accent-color:var(--acc)}
   select,textarea.sys-inp{width:100%;background:var(--surf);color:var(--txt);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px 12px;font-size:14px;outline:none}
+.agent-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:14px;font-size:12px;font-weight:600;background:#282a2c;color:var(--sub);border:1px solid #3c4043;cursor:pointer;margin-bottom:6px;transition:.15s}
+.agent-pill.on{background:rgba(168,199,250,.18);color:#a8c7fa;border-color:#a8c7fa}
 </style>
 </head>
 <body>
@@ -235,6 +237,46 @@
 </div>
 
 <script>
+let agentMode = false;
+let agentGoal = '';
+let agentStep = 0;
+let agentHistory = [];
+const MAX_AGENT_STEPS = 7;
+
+const AGENT_SYS_PROMPT = `Ты — автономный экранный AI-агент для Android. Ты видишь список элементов текущего экрана с индексами [0], [1]... и координатами [x,y].
+Чтобы выполнить следующий шаг к цели пользователя, ответь ТОЛЬКО одним валидным JSON без лишнего текста:
+{"action":"КОМАНДА","target":"ПАРАМЕТР","value":"ДОП"}
+Команды:
+- open_app (target: имя приложения, если нужное приложение ещё не открыто)
+- click_id (target: номер элемента из списка, например "3")
+- click (target: точный текст кнопки на экране)
+- tap_xy (target: "x,y" из координат элемента)
+- input_text (target: "текст для ввода", value: "номер_элемента_поля_или_пусто")
+- scroll (target: "down")
+- back (target: "")
+- home (target: "")
+- set_alarm (target: "ЧЧ:ММ", value: "название")
+- flashlight (target: "on" или "off")
+- done (target: "краткий отчёт, что задача выполнена")
+Если цель уже достигнута на текущем экране — обязательно верни {"action":"done","target":"..."}.`;
+
+function toggleAgentMode() {
+  agentMode = !agentMode;
+  const btn = document.getElementById('agentToggleBtn');
+  const hint = document.getElementById('agentPermHint');
+  if (agentMode) {
+    btn.classList.add('on');
+    btn.innerText = '🤖 Режим агента: ВКЛ';
+    if (window.VoltAndroid && VoltAndroid.isAgentAccessibilityEnabled && !VoltAndroid.isAgentAccessibilityEnabled()) {
+      hint.style.display = 'inline';
+    }
+  } else {
+    btn.classList.remove('on');
+    btn.innerText = '🤖 Режим агента: ВЫКЛ';
+    hint.style.display = 'none';
+  }
+}
+
 const DEFAULT_CFG = {
   temp: 0.6, topP: 0.9, maxTokens: 1024, threads: 4, ctx: 4096, showStats: true,
   sysPrompt: 'Отвечай чётко, структурированно и по делу на русском языке, используя Markdown.'
