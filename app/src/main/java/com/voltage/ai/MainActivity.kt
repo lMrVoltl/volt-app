@@ -55,6 +55,40 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
+    private var pendingAttachTargetId: String? = null
+
+    private val attachTargetLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val targetId = pendingAttachTargetId
+        pendingAttachTargetId = null
+        val uri = result.data?.data ?: return@registerForActivityResult
+        if (targetId.isNullOrEmpty()) return@registerForActivityResult
+        thread {
+            try {
+                val dest = File(modelsDir(), "$targetId.gguf")
+                if (dest.exists()) dest.delete()
+                contentResolver.openInputStream(uri)?.use { inp ->
+                    FileOutputStream(dest).use { out ->
+                        val buf = ByteArray(262144)
+                        while (true) {
+                            val r = inp.read(buf)
+                            if (r <= 0) break
+                            out.write(buf, 0, r)
+                        }
+                    }
+                }
+                runOnUiThread {
+                    webView.evaluateJavascript("window.onModelAttached('$targetId', true, '')", null)
+                }
+            } catch (e: Exception) {
+                val err = JSONObject.quote(e.message ?: "Ошибка чтения файла")
+                runOnUiThread {
+                    webView.evaluateJavascript("window.onModelAttached('$targetId', false, $err)", null)
+                }
+            }
+        }
+    }
 
     private val fileChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -446,15 +480,41 @@ class MainActivity : AppCompatActivity() {
             val json = JSONObject(rawJsonStr)
             json.put("online", isOnline)
             val models = json.getJSONArray("models")
+            val dlRoot = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val scanDirs = listOfNotNull(modelsDir(), dlRoot)
+
             for (i in 0 until models.length()) {
                 val m = models.getJSONObject(i)
                 val id = m.getString("id")
-                val file = resolveModelFile("$id.gguf")
+                val dlUrl = m.optString("download_url", "")
+                val origFileName = dlUrl.substringAfterLast("/").substringBefore("?")
+                var file = resolveModelFile("$id.gguf")
+                if (!file.exists() && origFileName.endsWith(".gguf")) {
+                    for (d in scanDirs) {
+                        val cand = File(d, origFileName)
+                        if (cand.exists() && cand.length() > 50_000_000L) {
+                            file = cand
+                            break
+                        }
+                    }
+                }
                 val hasMmproj = m.optString("mmproj_url", "").isNotEmpty()
-                val mmFile = resolveModelFile("$id-mmproj.gguf")
+                val origMmName = m.optString("mmproj_url", "").substringAfterLast("/").substringBefore("?")
+                var mmFile = resolveModelFile("$id-mmproj.gguf")
+                if (hasMmproj && !mmFile.exists() && origMmName.endsWith(".gguf")) {
+                    for (d in scanDirs) {
+                        val cand = File(d, origMmName)
+                        if (cand.exists() && cand.length() > 10_000_000L) {
+                            mmFile = cand
+                            break
+                        }
+                    }
+                }
                 val ok = file.exists() && file.length() > 50_000_000L &&
                         (!hasMmproj || (mmFile.exists() && mmFile.length() > 10_000_000L))
                 m.put("downloaded", ok)
+                if (file.exists()) m.put("resolved_path", file.absolutePath)
+                if (mmFile.exists()) m.put("resolved_mmproj_path", mmFile.absolutePath)
             }
             val dir = modelsDir()
             dir.listFiles()?.filter { it.name.startsWith("custom-") && it.name.endsWith(".gguf") }?.forEach { f ->
@@ -565,11 +625,53 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun loadModel(id: String, threads: Int, nCtx: Int) {
             thread {
-                val file = resolveModelFile("$id.gguf")
-                val mmFile = resolveModelFile("$id-mmproj.gguf")
+                val dlRoot = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val scanDirs = listOfNotNull(modelsDir(), dlRoot)
+                var file = resolveModelFile("$id.gguf")
+                var mmFile = resolveModelFile("$id-mmproj.gguf")
+
+                try {
+                    val fbArr = JSONObject(getFallbackCatalogJson()).getJSONArray("models")
+                    for (i in 0 until fbArr.length()) {
+                        val item = fbArr.getJSONObject(i)
+                        if (item.getString("id") == id) {
+                            val origName = item.optString("download_url", "").substringAfterLast("/").substringBefore("?")
+                            val origMm = item.optString("mmproj_url", "").substringAfterLast("/").substringBefore("?")
+                            if (!file.exists() && origName.endsWith(".gguf")) {
+                                scanDirs.firstOrNull { File(it, origName).exists() }?.let { file = File(it, origName) }
+                            }
+                            if (!mmFile.exists() && origMm.endsWith(".gguf")) {
+                                scanDirs.firstOrNull { File(it, origMm).exists() }?.let { mmFile = File(it, origMm) }
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+
                 val mmPath = if (mmFile.exists() && mmFile.length() > 10_000_000) mmFile.absolutePath else ""
                 val ok = file.exists() && nativeLoadModel(file.absolutePath, mmPath, threads, nCtx)
                 runOnUiThread { webView.evaluateJavascript("window.onModelLoaded('$id', $ok)", null) }
+            }
+        }
+
+        @JavascriptInterface
+        fun openExternalUrl(url: String) {
+            runOnUiThread {
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    startActivity(intent)
+                } catch (_: Exception) {}
+            }
+        }
+
+        @JavascriptInterface
+        fun attachModelFile(targetId: String) {
+            pendingAttachTargetId = targetId
+            runOnUiThread {
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "*/*"
+                }
+                attachTargetLauncher.launch(intent)
             }
         }
 
