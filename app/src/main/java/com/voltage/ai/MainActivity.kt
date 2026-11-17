@@ -180,38 +180,88 @@ class MainActivity : AppCompatActivity() {
 
     private fun downloadSingleFile(urlStr: String, target: File, progressStart: Int, progressSpan: Int, id: String) {
         val tmp = File(target.parentFile, target.name + ".part")
-        val dlClient = client.newBuilder().readTimeout(0, TimeUnit.SECONDS).writeTimeout(0, TimeUnit.SECONDS).callTimeout(0, TimeUnit.SECONDS).build()
-        val req = Request.Builder().url(urlStr).build()
-        dlClient.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
-            val body = resp.body ?: throw Exception("Нет данных")
-            val total = body.contentLength()
-            var downloaded = 0L
-            var lastPct = -1
+        var downloaded = if (tmp.exists()) tmp.length() else 0L
+        var lastPct = -1
+        var attempt = 0
+        val maxAttempts = 12
 
-            body.byteStream().use { input ->
-                FileOutputStream(tmp).use { output ->
-                    val buf = ByteArray(65536)
-                    while (true) {
-                        val r = input.read(buf)
-                        if (r <= 0) break
-                        output.write(buf, 0, r)
-                        downloaded += r
-                        if (total > 0) {
-                            val pct = progressStart + ((downloaded * progressSpan) / total).toInt()
-                            if (pct != lastPct) {
-                                lastPct = pct
-                                runOnUiThread {
-                                    webView.evaluateJavascript("window.onDownloadProgress('$id', $pct)", null)
+        val dlClient = client.newBuilder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(45, TimeUnit.SECONDS)
+            .writeTimeout(45, TimeUnit.SECONDS)
+            .callTimeout(0, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
+
+        while (attempt < maxAttempts) {
+            attempt++
+            try {
+                downloaded = if (tmp.exists()) tmp.length() else 0L
+                val reqBuilder = Request.Builder()
+                    .url(urlStr)
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) VoltAI/3.0")
+                if (downloaded > 0L) {
+                    reqBuilder.header("Range", "bytes=$downloaded-")
+                }
+
+                dlClient.newCall(reqBuilder.build()).execute().use { resp ->
+                    if (resp.code == 416) {
+                        // Файл уже скачан полностью
+                        if (target.exists()) target.delete()
+                        tmp.renameTo(target)
+                        return
+                    }
+                    if (!resp.isSuccessful && resp.code != 206) {
+                        throw Exception("HTTP ${resp.code}")
+                    }
+
+                    val appendMode = (resp.code == 206 && downloaded > 0L)
+                    if (!appendMode) {
+                        downloaded = 0L
+                    }
+                    val contentLen = resp.body?.contentLength() ?: -1L
+                    val total = if (contentLen > 0L) downloaded + contentLen else -1L
+                    val input = resp.body?.byteStream() ?: throw Exception("Пустой поток")
+
+                    FileOutputStream(tmp, appendMode).use { output ->
+                        val buf = ByteArray(131072)
+                        while (true) {
+                            val r = input.read(buf)
+                            if (r <= 0) break
+                            output.write(buf, 0, r)
+                            downloaded += r
+                            if (total > 0L) {
+                                val pct = progressStart + ((downloaded * progressSpan) / total).toInt()
+                                if (pct != lastPct) {
+                                    lastPct = pct
+                                    runOnUiThread {
+                                        webView.evaluateJavascript("window.onDownloadProgress('$id', $pct)", null)
+                                    }
                                 }
                             }
                         }
+                        output.flush()
+                    }
+
+                    if (total > 0L && downloaded < total) {
+                        throw Exception("Неполная загрузка: $downloaded / $total")
                     }
                 }
+
+                if (target.exists()) target.delete()
+                tmp.renameTo(target)
+                return
+            } catch (e: Exception) {
+                if (e.message?.contains("HTTP 404") == true || e.message?.contains("HTTP 403") == true) {
+                    throw e
+                }
+                if (attempt >= maxAttempts) {
+                    throw e
+                }
+                try { Thread.sleep(1500L) } catch (_: Exception) {}
             }
         }
-        if (target.exists()) target.delete()
-        tmp.renameTo(target)
     }
 
     fun onNativeToken(token: String) {
