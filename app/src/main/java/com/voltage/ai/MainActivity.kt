@@ -309,53 +309,199 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        private fun getFallbackCatalogJson(): String {
+            return """{
+              "models": [
+                {
+                  "id": "volt-photon-2.0",
+                  "family": "Volt Photon",
+                  "version": "v2.0",
+                  "family_desc": "Сверхлёгкая модель для мгновенных ответов и базового зрения",
+                  "name": "Volt Photon v2.0",
+                  "base_model": "Qwen2.5-VL-3B (Q3_K_M)",
+                  "params": "3B",
+                  "size_mb": 1480,
+                  "min_free_ram_mb": 2200,
+                  "vision": true,
+                  "description": "Быстрый старт и базовое распознавание фото при минимальном расходе RAM",
+                  "download_url": "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
+                  "mmproj_url": "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf"
+                },
+                {
+                  "id": "volt-ion-2.5",
+                  "family": "Volt Ion",
+                  "version": "v2.5",
+                  "family_desc": "Компактный помощник для быстрых повседневных задач без нагрузки на батарею",
+                  "name": "Volt Ion v2.5",
+                  "base_model": "Qwen2.5-1.5B-Instruct (Q4_K_M)",
+                  "params": "1.5B",
+                  "size_mb": 1120,
+                  "min_free_ram_mb": 1800,
+                  "vision": false,
+                  "description": "Сверхбыстрая генерация текста в оффлайне с минимальным нагревом",
+                  "download_url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+                  "mmproj_url": ""
+                },
+                {
+                  "id": "volt-neutron-2.5",
+                  "family": "Volt Neutron",
+                  "version": "v2.5",
+                  "family_desc": "Универсальный интеллект для логики, кода, учёбы и сложных текстов",
+                  "name": "Volt Neutron v2.5",
+                  "base_model": "Qwen2.5-3B-Instruct (Q4_K_M)",
+                  "params": "3B",
+                  "size_mb": 2100,
+                  "min_free_ram_mb": 2800,
+                  "vision": false,
+                  "description": "Лёгкая текстовая версия для быстрого диалога",
+                  "download_url": "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
+                  "mmproj_url": ""
+                },
+                {
+                  "id": "volt-neutron-3.0",
+                  "family": "Volt Neutron",
+                  "version": "v3.0 (Умная 7B)",
+                  "family_desc": "Универсальный интеллект для логики, кода, учёбы и сложных текстов",
+                  "name": "Volt Neutron v3.0",
+                  "base_model": "Qwen2.5-7B-Instruct (Q4_K_M)",
+                  "params": "7B",
+                  "size_mb": 4680,
+                  "min_free_ram_mb": 4800,
+                  "vision": false,
+                  "description": "Полноценная 7B-модель: глубокая логика, точные факты, сильный русский язык и код",
+                  "download_url": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf",
+                  "mmproj_url": ""
+                },
+                {
+                  "id": "volt-plasma-2.5",
+                  "family": "Volt Plasma",
+                  "version": "v2.5",
+                  "family_desc": "Флагманский мультимодальный ИИ: анализ фото, документов и глубокий диалог",
+                  "name": "Volt Plasma v2.5",
+                  "base_model": "Qwen2.5-VL-3B-Instruct (Q4_K_M)",
+                  "params": "3B + Vision",
+                  "size_mb": 2580,
+                  "min_free_ram_mb": 3400,
+                  "vision": true,
+                  "description": "Базовая мультимодальная модель для разбора фото и текста",
+                  "download_url": "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
+                  "mmproj_url": "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf"
+                },
+                {
+                  "id": "volt-plasma-3.0",
+                  "family": "Volt Plasma",
+                  "version": "v3.0 (Флагман 7B)",
+                  "family_desc": "Флагманский мультимодальный ИИ: анализ фото, документов и глубокий диалог",
+                  "name": "Volt Plasma v3.0",
+                  "base_model": "Qwen2.5-VL-7B-Instruct (Q4_K_M)",
+                  "params": "7B + Vision",
+                  "size_mb": 5450,
+                  "min_free_ram_mb": 5600,
+                  "vision": true,
+                  "description": "Старший флагман: высокая точность понимания сложных снимков, конспектов и рассуждений",
+                  "download_url": "https://huggingface.co/ggml-org/Qwen2.5-VL-7B-Instruct-GGUF/resolve/main/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
+                  "mmproj_url": "https://huggingface.co/ggml-org/Qwen2.5-VL-7B-Instruct-GGUF/resolve/main/mmproj-Qwen2.5-VL-7B-Instruct-f16.gguf"
+                }
+              ]
+            }"""
+        }
+
+        private fun buildCatalogPayload(rawJsonStr: String, isOnline: Boolean): String {
+            val json = JSONObject(rawJsonStr)
+            json.put("online", isOnline)
+            val models = json.getJSONArray("models")
+            for (i in 0 until models.length()) {
+                val m = models.getJSONObject(i)
+                val id = m.getString("id")
+                val file = resolveModelFile("$id.gguf")
+                val hasMmproj = m.optString("mmproj_url", "").isNotEmpty()
+                val mmFile = resolveModelFile("$id-mmproj.gguf")
+                val ok = file.exists() && file.length() > 50_000_000L &&
+                        (!hasMmproj || (mmFile.exists() && mmFile.length() > 10_000_000L))
+                m.put("downloaded", ok)
+            }
+            val dir = modelsDir()
+            dir.listFiles()?.filter { it.name.startsWith("custom-") && it.name.endsWith(".gguf") }?.forEach { f ->
+                val cid = f.nameWithoutExtension
+                models.put(JSONObject()
+                    .put("id", cid)
+                    .put("family", f.nameWithoutExtension.removePrefix("custom-"))
+                    .put("version", "Локальный GGUF")
+                    .put("family_desc", "Импортированная пользователем модель")
+                    .put("name", f.nameWithoutExtension.removePrefix("custom-"))
+                    .put("base_model", "Custom GGUF")
+                    .put("params", "${f.length() / (1024 * 1024)} МБ")
+                    .put("size_mb", f.length() / (1024 * 1024))
+                    .put("min_free_ram_mb", 1500)
+                    .put("vision", false)
+                    .put("description", "Локальный файл из памяти устройства")
+                    .put("downloaded", true))
+            }
+            return json.toString()
+        }
+
         @JavascriptInterface
         fun fetchCatalog() {
             thread {
+                val cacheFile = File(filesDir, "models_cache.json")
+                // 1. Мгновенно отдаём кэш / встроенный каталог за 0 мс (без ожидания сети)
                 try {
+                    val localRaw = if (cacheFile.exists()) cacheFile.readText() else getFallbackCatalogJson()
+                    val instantPayload = buildCatalogPayload(localRaw, false)
+                    val qInstant = JSONObject.quote(instantPayload)
+                    runOnUiThread { webView.evaluateJavascript("window.onCatalogLoaded($qInstant)", null) }
+                } catch (_: Exception) {}
+
+                // 2. Фоновая синхронизация с GitHub с коротким таймаутом 4 секунды
+                try {
+                    val fastClient = client.newBuilder()
+                        .connectTimeout(4, TimeUnit.SECONDS)
+                        .readTimeout(4, TimeUnit.SECONDS)
+                        .callTimeout(5, TimeUnit.SECONDS)
+                        .build()
                     val req = Request.Builder().url(CATALOG_URL).build()
-                    val raw = client.newCall(req).execute().use { resp ->
+                    val netRaw = fastClient.newCall(req).execute().use { resp ->
                         if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
-                        resp.body?.string() ?: throw Exception("Пустой ответ")
+                        resp.body?.string() ?: throw Exception("Empty")
                     }
-                    val json = JSONObject(raw)
-                    val models = json.getJSONArray("models")
-                    val dir = modelsDir()
-                    for (i in 0 until models.length()) {
-                        val m = models.getJSONObject(i)
-                        val id = m.getString("id")
-                        val file = resolveModelFile("$id.gguf")
-                        val hasMmproj = m.optString("mmproj_url", "").isNotEmpty()
-                        val mmFile = resolveModelFile("$id-mmproj.gguf")
-                        val ready = file.exists() && file.length() > 10_000_000 &&
-                            (!hasMmproj || (mmFile.exists() && mmFile.length() > 10_000_000))
-                        m.put("downloaded", ready)
+                    val netObj = JSONObject(netRaw)
+                    val netArr = netObj.getJSONArray("models")
+                    val fbArr = JSONObject(getFallbackCatalogJson()).getJSONArray("models")
+                    val existingIds = HashSet<String>()
+                    for (i in 0 until netArr.length()) {
+                        existingIds.add(netArr.getJSONObject(i).getString("id"))
                     }
-                    val appDir = modelsDir()
-                    appDir.listFiles()?.filter { it.isFile && it.name.startsWith("custom-") && it.name.endsWith(".gguf") && it.length() > 10_000_000L }?.forEach { cf ->
-                        val cid = cf.name.removeSuffix(".gguf")
-                        val cname = cid.removePrefix("custom-")
-                        models.put(JSONObject()
-                            .put("id", cid)
-                            .put("name", cname)
-                            .put("tier", "Локальная модель (.gguf)")
-                            .put("base_model", cf.name)
-                            .put("params", "Custom GGUF")
-                            .put("size_mb", cf.length() / (1024 * 1024))
-                            .put("min_free_ram_mb", 1500)
-                            .put("vision", false)
-                            .put("uncensored", true)
-                            .put("description", "Локальный файл модели с устройства.")
-                            .put("download_url", "")
-                            .put("mmproj_url", "")
-                            .put("downloaded", true))
+                    for (i in 0 until fbArr.length()) {
+                        val fbItem = fbArr.getJSONObject(i)
+                        if (!existingIds.contains(fbItem.getString("id"))) {
+                            netArr.put(fbItem)
+                        }
                     }
-                    val quoted = JSONObject.quote(json.toString())
-                    runOnUiThread { webView.evaluateJavascript("window.onCatalogLoaded($quoted)", null) }
-                } catch (e: Exception) {
-                    val err = JSONObject.quote(e.message ?: "Ошибка сети")
-                    runOnUiThread { webView.evaluateJavascript("window.onCatalogError($err)", null) }
+                    val mergedStr = netObj.toString()
+                    cacheFile.writeText(mergedStr)
+                    val onlinePayload = buildCatalogPayload(mergedStr, true)
+                    val qOnline = JSONObject.quote(onlinePayload)
+                    runOnUiThread { webView.evaluateJavascript("window.onCatalogLoaded($qOnline)", null) }
+                } catch (_: Exception) {
+                    // Сети нет или GitHub заблокирован — локальный список уже отрисован
                 }
+            }
+        }
+
+        @JavascriptInterface
+        fun deleteModel(id: String): Boolean {
+            return try {
+                val f1 = resolveModelFile("$id.gguf")
+                val f2 = resolveModelFile("$id-mmproj.gguf")
+                val d1 = File(modelsDir(), "$id.gguf")
+                val d2 = File(modelsDir(), "$id-mmproj.gguf")
+                if (f1.exists()) f1.delete()
+                if (f2.exists()) f2.delete()
+                if (d1.exists()) d1.delete()
+                if (d2.exists()) d2.delete()
+                true
+            } catch (_: Exception) {
+                false
             }
         }
 
