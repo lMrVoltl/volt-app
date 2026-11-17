@@ -130,7 +130,7 @@ class MainActivity : AppCompatActivity() {
         .build()
 
     external fun nativeLoadModel(path: String, mmprojPath: String, threads: Int, nCtx: Int): Boolean
-    external fun promptStartTimeMs = System.currentTimeMillis(); firstTokenTimeMs = 0L; nativeGenerate(prompt: String, sysPrompt: String, rgbBytes: ByteArray?, imgW: Int, imgH: Int, temp: Float, topP: Float, maxTokens: Int)
+    external fun nativeGenerate(prompt: String, sysPrompt: String, rgbBytes: ByteArray?, imgW: Int, imgH: Int, temp: Float, topP: Float, maxTokens: Int)
     external fun nativeStop()
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -214,8 +214,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun onNativeToken(token: String) {
+        if (firstTokenTimeMs == 0L) firstTokenTimeMs = System.currentTimeMillis()
+        if (apiGenerationLatch != null) apiStreamBuffer.append(token)
         val escaped = JSONObject.quote(token)
-        runOnUiThread { webView.evaluateJavascript("window.if (firstTokenTimeMs == 0L) firstTokenTimeMs = System.currentTimeMillis(); if (apiGenerationLatch != null) apiStreamBuffer.append(token); onVoltToken($escaped)", null) }
+        runOnUiThread { webView.evaluateJavascript("window.onVoltToken($escaped)", null) }
     }
 
     fun onNativeStats(tokens: Int, tps: Double, totalSec: Double, visionState: Int, visionErr: String) {
@@ -420,7 +422,8 @@ class MainActivity : AppCompatActivity() {
                     } catch (_: Exception) {}
                 }
                 promptStartTimeMs = System.currentTimeMillis(); firstTokenTimeMs = 0L; nativeGenerate(formattedHistory, sysPrompt, rgbBytes, w, h, temp, topP, maxTokens)
-                runOnUiThread { webView.evaluateJavascript("window.apiGenerationLatch?.countDown(); onVoltDone()", null) }
+                apiGenerationLatch?.countDown()
+        runOnUiThread { webView.evaluateJavascript("window.onVoltDone()", null) }
             }
         }
 
