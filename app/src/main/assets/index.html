@@ -188,7 +188,7 @@
 
 <footer>
   <div class="agent-strip" id="agentStrip">
-    <div class="agent-strip-tag">🤖 Режим агента • Экран и файлы</div>
+    <div class="agent-strip-tag">🤖 Режим агента • Зрение экрана и файлы</div>
     <div style="display:flex;gap:6px">
       <button type="button" class="agent-mini-btn warn" id="agentPermHint" style="display:none" onclick="VoltAndroid.openAccessibilitySettings()">Доступ к экрану</button>
       <button type="button" class="agent-mini-btn" onclick="alert('Рабочая папка агента для кода и файлов:\n/sdcard/Download/VoltWorkspace')">📁 Папка</button>
@@ -398,31 +398,20 @@ let lastAgentActionKey = '';
 const MAX_AGENT_STEPS = 6;
 const ONE_SHOT_ACTIONS = new Set(['open_app', 'flashlight', 'set_alarm', 'set_timer', 'search_web', 'open_settings']);
 
-const APP_ALIASES = {
-  'ютуб': 'YouTube', 'ютюб': 'YouTube', 'youtube': 'YouTube',
-  'телеграм': 'Telegram', 'телега': 'Telegram', 'тг': 'Telegram', 'tg': 'Telegram',
-  'хром': 'Chrome', 'браузер': 'Chrome', 'гугл': 'Chrome',
-  'настройки': 'Настройки', 'settings': 'Настройки',
-  'камера': 'Камера', 'калькулятор': 'Калькулятор',
-  'вк': 'VK', 'вконтакте': 'VK',
-  'ватсап': 'WhatsApp', 'вацап': 'WhatsApp',
-  'тикток': 'TikTok', 'тиктоке': 'TikTok',
-  'термукс': 'Termux', 'галерея': 'Галерея'
-};
-
-const AGENT_SYS_PROMPT = `Ты — автономный AI-агент Volt для Android (управление телефоном и файлы в VoltWorkspace).
+const AGENT_SYS_PROMPT = `Ты — автономный визуальный AI-агент Volt для Android.
+Ты воспринимаешь телефон в реальном времени через зрение экрана (UI-дерево и скриншоты) и реальный список установленных приложений.
 Отвечай СТРОГО одним JSON-объектом без лишнего текста:
 {"action":"КОМАНДА","target":"ПАРАМЕТР","value":"ДОП"}
 
 Команды:
-- open_app (target: название нужного приложения на английском или русском, например "YouTube", "Telegram", "Chrome". Никогда не открывай "com.voltage.ai")
+- open_app (target: точное название приложения из списка установленных на устройстве)
 - click_id (target: номер id элемента с экрана)
-- click (target: точный текст кнопки)
+- click (target: точный текст кнопки на экране)
 - tap_xy (target: "x,y")
 - input_text (target: "текст", value: "id_поля")
 - scroll (target: "down") / scroll_up (target: "up")
 - back (target: "") / home (target: "")
-- look_screen (target: "что проверить на скриншоте")
+- look_screen (target: "что нужно увидеть на скриншоте")
 - set_alarm (target: "ЧЧ:ММ", value: "название") / set_timer (target: "секунды")
 - flashlight (target: "on" или "off")
 - search_web (target: "запрос")
@@ -431,33 +420,26 @@ const AGENT_SYS_PROMPT = `Ты — автономный AI-агент Volt дл�
 - run_shell (target: "команда sh")
 - done (target: "отчёт о выполнении")
 
-Пример: Цель "Открой ютуб" -> {"action":"open_app","target":"YouTube","value":""}
 Если действие уже выполнено — сразу верни {"action":"done","target":"..."}.`;
 
-function getCleanScreenContext() {
-  if (!window.VoltAndroid || !VoltAndroid.getScreenUiState) return 'Экран недоступен.';
+function getScreenObservation() {
+  if (!window.VoltAndroid || !VoltAndroid.getScreenUiState) {
+    return { isSelf: true, text: 'Экран недоступен.' };
+  }
   const raw = VoltAndroid.getScreenUiState();
   try {
     const obj = JSON.parse(raw);
     if (obj && obj.package === 'com.voltage.ai') {
-      return 'Сейчас открыт чат Volt AI (нужное приложение ещё не запущено).';
+      return { isSelf: true, text: 'Сейчас открыт чат Volt AI.' };
     }
   } catch (_) {}
-  return raw;
+  return { isSelf: false, text: raw };
 }
 
-function normalizeAppTarget(rawTarget, goalText) {
-  let t = String(rawTarget || '').trim();
-  const tl = t.toLowerCase();
-  if (APP_ALIASES[tl]) return APP_ALIASES[tl];
-  // Если модель всё же подставила пакет самого Volt AI — извлекаем нужное приложение из цели пользователя
-  if (!t || tl.includes('voltage') || tl.includes('volt')) {
-    const gl = String(goalText || '').toLowerCase();
-    for (const [k, v] of Object.entries(APP_ALIASES)) {
-      if (gl.includes(k)) return v;
-    }
-  }
-  return t;
+function getRealAppsContext() {
+  if (!window.VoltAndroid || !VoltAndroid.getInstalledAppsList) return '';
+  const list = VoltAndroid.getInstalledAppsList();
+  return list ? ('Установленные приложения: ' + list) : '';
 }
 
 function refreshAgentBar() {
@@ -1072,7 +1054,7 @@ function send() {
     let llmText = txt;
     let visionDataUrl = '';
     const activeModelObj = models.find(x => x.id === activeId);
-    const isVisionModel = activeModelObj && activeModelObj.vision;
+    const isVisionModel = !!(activeModelObj && activeModelObj.vision);
     const userMsg = { role: 'user', displayText: txt || 'Проанализируй вложение' };
 
     if (pendingAttachment) {
@@ -1098,7 +1080,7 @@ function send() {
     saveChats();
     renderCurrentChat();
 
-    appendBotPlaceholder(agentMode ? '🤖 Агент анализирует задачу...' : (visionDataUrl ? '👁 Обработка фото...' : 'Подготовка ответа...'));
+    appendBotPlaceholder(agentMode ? '🤖 Агент осматривает устройство...' : (visionDataUrl ? '👁 Обработка фото...' : 'Подготовка ответа...'));
 
     inp.value = '';
     inp.style.height = 'auto';
@@ -1109,8 +1091,9 @@ function send() {
       agentStep = 1;
       agentHistory = [];
       lastAgentActionKey = '';
-      const screenInfo = getCleanScreenContext();
-      const agentPrompt = `<|im_start|>user\nЦель: ${agentGoal}\nШаг ${agentStep}/${MAX_AGENT_STEPS}.\nКонтекст: ${screenInfo}<|im_end|>\n<|im_start|>assistant\n`;
+      const obs = getScreenObservation();
+      const appsCtx = getRealAppsContext();
+      const agentPrompt = `<|im_start|>user\nЦель: ${agentGoal}\nШаг ${agentStep}/${MAX_AGENT_STEPS}.\n${appsCtx}\nЭкран: ${obs.text}<|im_end|>\n<|im_start|>assistant\n`;
       VoltAndroid.sendPrompt(agentPrompt, AGENT_SYS_PROMPT, visionDataUrl, 0.1, cfg.topP, 384);
     } else {
       const recent = c.messages.slice(-8).map(m =>
@@ -1168,9 +1151,6 @@ window.onVoltDone = () => {
       try {
         const cmd = JSON.parse(match[0]);
         const actName = (cmd.action || cmd.cmd || '').toLowerCase();
-        if (actName === 'open_app') {
-          cmd.target = normalizeAppTarget(cmd.target, agentGoal);
-        }
         const actKey = actName + ':' + String(cmd.target || '').toLowerCase().trim();
 
         if (actName === 'done' || agentStep >= MAX_AGENT_STEPS || (actKey === lastAgentActionKey && actKey !== ':')) {
@@ -1187,10 +1167,10 @@ window.onVoltDone = () => {
         lastAgentActionKey = actKey;
 
         let execRes = '';
-        let nextVisionImg = '';
+        let forcedShot = false;
         if (actName === 'look_screen') {
-          nextVisionImg = (VoltAndroid.captureScreenForAgent) ? VoltAndroid.captureScreenForAgent() : '';
-          execRes = nextVisionImg ? 'Снимок экрана передан в Vision' : 'Нет доступа к снимку экрана';
+          forcedShot = true;
+          execRes = 'Делаю визуальный снимок экрана...';
         } else {
           execRes = VoltAndroid.executeAgentAction(JSON.stringify(cmd));
         }
@@ -1199,7 +1179,7 @@ window.onVoltDone = () => {
         agentHistory.push(logLine);
 
         const hasAcc = (window.VoltAndroid && VoltAndroid.isAgentAccessibilityEnabled) ? VoltAndroid.isAgentAccessibilityEnabled() : false;
-        const isShortSingleGoal = ONE_SHOT_ACTIONS.has(actName) && (!hasAcc || agentGoal.trim().split(/\s+/).length <= 4);
+        const isShortSingleGoal = ONE_SHOT_ACTIONS.has(actName) && (!hasAcc || agentGoal.trim().split(/\s+/).length <= 3);
 
         c.messages.push({ role: 'assistant', text: isShortSingleGoal ? execRes : ('Выполняю: `' + actName + '`'), agentLog: logLine, stats: lastStatsStr });
         saveChats();
@@ -1214,11 +1194,17 @@ window.onVoltDone = () => {
 
         agentStep++;
         setTimeout(() => {
-          const nextScreen = getCleanScreenContext();
-          const nextPrompt = `<|im_start|>user\nЦель: ${agentGoal}\nСделано:\n${agentHistory.join('\n')}\n\nШаг ${agentStep}/${MAX_AGENT_STEPS}. Экран:\n${nextScreen}<|im_end|>\n<|im_start|>assistant\n`;
-          appendBotPlaceholder('🤖 Шаг ' + agentStep + '/' + MAX_AGENT_STEPS + '...');
+          const obs = getScreenObservation();
+          const activeModelObj = models.find(x => x.id === activeId);
+          const hasVision = !!(activeModelObj && activeModelObj.vision);
+          let nextVisionImg = '';
+          if (hasVision && (forcedShot || !obs.isSelf) && VoltAndroid.captureScreenForAgent) {
+            nextVisionImg = VoltAndroid.captureScreenForAgent();
+          }
+          const nextPrompt = `<|im_start|>user\nЦель: ${agentGoal}\nСделано:\n${agentHistory.join('\n')}\n\nШаг ${agentStep}/${MAX_AGENT_STEPS}. Экран:\n${obs.text}<|im_end|>\n<|im_start|>assistant\n`;
+          appendBotPlaceholder(nextVisionImg ? ('👁 Шаг ' + agentStep + '/' + MAX_AGENT_STEPS + ' (смотрю экран)...') : ('🤖 Шаг ' + agentStep + '/' + MAX_AGENT_STEPS + '...'));
           VoltAndroid.sendPrompt(nextPrompt, AGENT_SYS_PROMPT, nextVisionImg, 0.1, cfg.topP, 384);
-        }, 1100);
+        }, 1200);
         return;
       } catch (e) {}
     }

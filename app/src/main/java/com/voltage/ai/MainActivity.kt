@@ -226,6 +226,88 @@ class MainActivity : AppCompatActivity() {
         return appFile
     }
 
+    private fun translitRuToEn(input: String): String {
+        val map = mapOf(
+            'а' to "a", 'б' to "b", 'в' to "v", 'г' to "g", 'д' to "d",
+            'е' to "e", 'ё' to "e", 'ж' to "zh", 'з' to "z", 'и' to "i",
+            'й' to "y", 'к' to "k", 'л' to "l", 'м' to "m", 'н' to "n",
+            'о' to "o", 'п' to "p", 'р' to "r", 'с' to "s", 'т' to "t",
+            'у' to "u", 'ф' to "f", 'х' to "h", 'ц' to "ts", 'ч' to "ch",
+            'ш' to "sh", 'щ' to "shch", 'ъ' to "", 'ы' to "y", 'ь' to "",
+            'э' to "e", 'ю' to "yu", 'я' to "ya"
+        )
+        val sb = StringBuilder()
+        for (ch in input.lowercase()) {
+            sb.append(map[ch] ?: ch)
+        }
+        return sb.toString()
+    }
+
+    private fun levenshtein(a: String, b: String): Int {
+        if (a == b) return 0
+        if (a.isEmpty()) return b.length
+        if (b.isEmpty()) return a.length
+        var prev = IntArray(b.length + 1) { it }
+        var curr = IntArray(b.length + 1)
+        for (i in 1..a.length) {
+            curr[0] = i
+            for (j in 1..b.length) {
+                val cost = if (a[i - 1] == b[j - 1]) 0 else 1
+                curr[j] = minOf(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost)
+            }
+            val tmp = prev; prev = curr; curr = tmp
+        }
+        return prev[b.length]
+    }
+
+    private fun getLaunchableApps(): List<Pair<String, String>> {
+        val pm = packageManager
+        val mainIntent = Intent(Intent.ACTION_MAIN, null).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
+        val resolved = pm.queryIntentActivities(mainIntent, 0)
+        return resolved.mapNotNull { ri ->
+            val pkg = ri.activityInfo?.packageName ?: return@mapNotNull null
+            if (pkg == packageName) return@mapNotNull null
+            val label = ri.loadLabel(pm)?.toString()?.trim().orEmpty()
+            if (label.isEmpty()) null else Pair(label, pkg)
+        }.distinctBy { it.second }.sortedBy { it.first.lowercase() }
+    }
+
+    private fun findBestMatchingApp(query: String): Pair<String, String>? {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) return null
+        val qTrans = translitRuToEn(q).replace(Regex("[^a-z0-9]"), "")
+        val apps = getLaunchableApps()
+
+        // 1. Точное совпадение по имени
+        apps.firstOrNull { it.first.lowercase() == q }?.let { return it }
+        // 2. Прямое вхождение в имя или packageName
+        apps.firstOrNull { it.first.lowercase().contains(q) || it.second.lowercase().contains(q) }?.let { return it }
+        // 3. Совпадение после фонетической транслитерации (без словаря)
+        if (qTrans.length >= 2) {
+            apps.firstOrNull { (label, pkg) ->
+                val lTrans = translitRuToEn(label).replace(Regex("[^a-z0-9]"), "")
+                val pNorm = pkg.lowercase().replace(Regex("[^a-z0-9]"), "")
+                lTrans.contains(qTrans) || qTrans.contains(lTrans) && lTrans.length >= 3 || pNorm.contains(qTrans)
+            }?.let { return it }
+
+            // 4. Нечёткий поиск (расстояние Левенштейна) на случай опечаток или фонетических расхождений (ютуб -> youtube)
+            var best: Pair<String, String>? = null
+            var bestScore = Double.MAX_VALUE
+            for (app in apps) {
+                val lTrans = translitRuToEn(app.first).replace(Regex("[^a-z0-9]"), "")
+                if (lTrans.isEmpty()) continue
+                val dist = levenshtein(qTrans, lTrans)
+                val ratio = dist.toDouble() / maxOf(qTrans.length, lTrans.length)
+                if (ratio < bestScore && ratio <= 0.45) {
+                    bestScore = ratio
+                    best = app
+                }
+            }
+            if (best != null) return best
+        }
+        return null
+    }
+
     private fun downloadSingleFile(urlStr: String, target: File, progressStart: Int, progressSpan: Int, id: String) {
         val tmp = File(target.parentFile, target.name + ".part")
         var downloaded = if (tmp.exists()) tmp.length() else 0L
@@ -384,6 +466,15 @@ class MainActivity : AppCompatActivity() {
                 .put("simd", simdList.joinToString(" • "))
                 .put("supported", supported)
                 .toString()
+        }
+
+        @JavascriptInterface
+        fun getInstalledAppsList(): String {
+            return try {
+                getLaunchableApps().take(70).joinToString(", ") { it.first }
+            } catch (_: Exception) {
+                ""
+            }
         }
 
         @JavascriptInterface
@@ -759,8 +850,8 @@ class MainActivity : AppCompatActivity() {
                 val value = obj.optString("value", obj.optString("content", ""))
 
                 when (action) {
-                    // === ЭКРАН И ОС ===
                     "read_screen" -> VoltAgentService.dumpScreenTree()
+                    "list_apps" -> getInstalledAppsList()
                     "click_id" -> {
                         val idx = target.filter { it.isDigit() }.toIntOrNull() ?: -1
                         if (!VoltAgentService.isEnabled()) "Нужно включить спец. возможности для Volt AI"
@@ -805,25 +896,18 @@ class MainActivity : AppCompatActivity() {
                         "Переход на главный экран"
                     }
                     "open_app" -> {
-                        val pm = packageManager
-                        val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-                        var matchedPkg: String? = null
-                        for (app in apps) {
-                            val label = pm.getApplicationLabel(app).toString()
-                            if (label.equals(target, true) || label.contains(target, true) || app.packageName.contains(target, true)) {
-                                if (pm.getLaunchIntentForPackage(app.packageName) != null) {
-                                    matchedPkg = app.packageName
-                                    if (label.equals(target, true)) break
-                                }
+                        val match = findBestMatchingApp(target)
+                        if (match != null) {
+                            val launch = packageManager.getLaunchIntentForPackage(match.second)
+                            if (launch != null) {
+                                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                startActivity(launch)
+                                "Открыто приложение: ${match.first}"
+                            } else {
+                                "Не удалось запустить: ${match.first}"
                             }
-                        }
-                        if (matchedPkg != null) {
-                            val launch = pm.getLaunchIntentForPackage(matchedPkg)!!
-                            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            startActivity(launch)
-                            "Открыто приложение: $target"
                         } else {
-                            "Приложение «$target» не найдено"
+                            "Приложение «$target» не найдено среди установленных"
                         }
                     }
                     "set_alarm" -> {
@@ -873,8 +957,6 @@ class MainActivity : AppCompatActivity() {
                         startActivity(Intent(act).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
                         "Открыты настройки ($target)"
                     }
-
-                    // === CLAUDE CODE: ФАЙЛЫ И SHELL ===
                     "list_files" -> {
                         val dir = resolveWorkspaceFile(target)
                         if (!dir.exists() || !dir.isDirectory) "Папка не найдена: ${dir.absolutePath}"
