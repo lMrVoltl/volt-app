@@ -5,144 +5,166 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Volt AI</title>
 <style>
-  :root{--bg:#131314;--surf:#1e1f20;--surf2:#282a2c;--card:#1e1f22;--bdr:#333538;--txt:#e3e3e3;--sub:#9aa0a6;--acc:#a8c7fa;--accTxt:#062e6f;--ok:#81c995;--warn:#f28b82}
+  :root{
+    --bg:#131314;
+    --surf:#1e1f20;
+    --surf2:#282a2c;
+    --card:#1b1c1e;
+    --bdr:rgba(255,255,255,.08);
+    --txt:#e3e3e3;
+    --sub:#9aa0a6;
+    --acc:#a8c7fa;
+    --accTxt:#062e6f;
+    --ok:#81c995;
+    --warn:#f28b82;
+    --hero-bg:linear-gradient(135deg,#1d293e 0%,#261e38 55%,#1b232e 100%);
+    --hero-bdr:rgba(168,199,250,.22);
+    --hero-txt:#ffffff;
+    --hero-sub:#b8c4d9;
+    --bento-bg:rgba(255,255,255,.07);
+    --code-bg:#0d0d0e;
+    --code-txt:#e3e3e3;
+  }
+  body.light-theme {
+    --bg:#f7f7f5;
+    --surf:#ecece8;
+    --surf2:#e3e3dd;
+    --card:#ffffff;
+    --bdr:rgba(0,0,0,.09);
+    --txt:#1a1b1e;
+    --sub:#64676e;
+    --acc:#2563eb;
+    --accTxt:#ffffff;
+    --ok:#15803d;
+    --warn:#dc2626;
+    --hero-bg:linear-gradient(135deg,#eef4ff 0%,#f3efff 55%,#edf2f7 100%);
+    --hero-bdr:rgba(37,99,235,.18);
+    --hero-txt:#111827;
+    --hero-sub:#4b5563;
+    --bento-bg:rgba(255,255,255,.78);
+    --code-bg:#1e1f22;
+    --code-txt:#f3f4f6;
+  }
   *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,system-ui,sans-serif}
-  body{background:var(--bg);color:var(--txt);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+  body{background:var(--bg);color:var(--txt);height:100dvh;display:flex;flex-direction:column;overflow:hidden;transition:background .2s,color .2s}
   header{height:56px;padding:0 10px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:6px}
-  .pill{background:var(--surf);border:none;color:var(--txt);padding:8px 14px;border-radius:20px;font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;max-width:56vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pill{background:var(--surf);border:1px solid var(--bdr);color:var(--txt);padding:8px 14px;border-radius:20px;font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;max-width:56vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .icon-btn{width:38px;height:38px;border-radius:19px;border:none;background:transparent;color:var(--txt);display:grid;place-items:center;flex-shrink:0}
   main{flex:1;overflow-y:auto;padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px}
   .welcome{margin:auto 0;padding:16px 4px}
-  .welcome h1{font-size:28px;font-weight:500;background:linear-gradient(90deg,#a8c7fa,#c58af9);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .welcome h1{font-size:28px;font-weight:600;background:linear-gradient(90deg,var(--acc),#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
   .welcome p{color:var(--sub);margin-top:8px;font-size:15px}
-  .msg-u{align-self:flex-end;background:var(--surf2);padding:12px 16px;border-radius:22px 22px 6px 22px;max-width:85%;font-size:15px;line-height:1.45;word-break:break-word;cursor:pointer}
+  .msg-u{align-self:flex-end;background:var(--surf2);color:var(--txt);padding:12px 16px;border-radius:22px 22px 6px 22px;max-width:85%;font-size:15px;line-height:1.45;word-break:break-word;cursor:pointer}
   .msg-u img{max-width:100%;border-radius:12px;margin-bottom:8px;display:block}
-  .att-tag{font-size:12px;color:var(--acc);background:rgba(168,199,250,.12);padding:4px 8px;border-radius:8px;margin-bottom:6px;display:inline-block}
+  .att-tag{font-size:12px;color:var(--acc);background:rgba(168,199,250,.14);padding:4px 8px;border-radius:8px;margin-bottom:6px;display:inline-block}
   .msg-a{display:flex;gap:10px;align-items:flex-start;font-size:15px;line-height:1.55;cursor:pointer}
   .spark{width:26px;height:26px;border-radius:13px;background:var(--surf2);display:grid;place-items:center;flex-shrink:0;color:var(--acc);margin-top:2px}
   .bot-wrap{flex:1;min-width:0}
-  .bot-txt{word-break:break-word}
-  .agent-step-box{background:rgba(168,199,250,.08);border:1px solid rgba(168,199,250,.22);border-radius:12px;padding:8px 11px;margin-top:6px;font-family:monospace;font-size:12px;color:var(--acc);white-space:pre-wrap}
-  .stats-bar{margin-top:8px;display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--surf);border:1px solid rgba(255,255,255,.06);padding:4px 10px;border-radius:12px;font-size:11.5px;color:var(--sub);font-variant-numeric:tabular-nums}
+  .bot-txt{word-break:break-word;color:var(--txt)}
+  .agent-step-box{background:var(--surf);border:1px solid var(--bdr);border-left:3px solid var(--acc);border-radius:10px;padding:8px 11px;margin-top:6px;font-family:monospace;font-size:12px;color:var(--txt);white-space:pre-wrap}
+  .stats-bar{margin-top:8px;display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--surf);border:1px solid var(--bdr);padding:4px 10px;border-radius:12px;font-size:11.5px;color:var(--sub);font-variant-numeric:tabular-nums}
   .stats-bar b{color:var(--ok);font-weight:600}
   .stats-bar .v-ok{color:var(--acc);font-weight:600}
   .stats-bar .v-err{color:var(--warn);font-weight:600}
-  .bot-txt pre{background:#0d0d0e;padding:12px;border-radius:12px;overflow-x:auto;margin:8px 0;font-family:monospace;font-size:13px;position:relative;color:#e3e3e3}
+  .bot-txt pre{background:var(--code-bg);color:var(--code-txt);padding:12px;border-radius:12px;overflow-x:auto;margin:8px 0;font-family:monospace;font-size:13px;position:relative}
   .bot-txt code{font-family:monospace;background:var(--surf2);padding:2px 5px;border-radius:5px;font-size:13px}
-  .bot-txt pre code{background:transparent;padding:0}
-  .copy-btn{position:absolute;top:6px;right:6px;background:var(--surf2);color:var(--txt);border:none;border-radius:6px;padding:3px 8px;font-size:11px}
+  .bot-txt pre code{background:transparent;padding:0;color:inherit}
+  .copy-btn{position:absolute;top:6px;right:6px;background:rgba(255,255,255,.14);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px}
+
   footer{padding:4px 12px 14px;background:var(--bg);flex-shrink:0}
-  .agent-bar{display:flex;align-items:center;gap:6px;overflow-x:auto;padding:2px 2px 7px;scrollbar-width:none}
-  .agent-bar::-webkit-scrollbar{display:none}
-  .agent-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:14px;font-size:12px;font-weight:600;background:var(--surf2);color:var(--sub);border:1px solid var(--bdr);cursor:pointer;white-space:nowrap;transition:.15s}
-  .agent-pill.on{background:rgba(168,199,250,.18);color:var(--acc);border-color:var(--acc)}
-  .agent-pill.warn{background:rgba(242,139,130,.15);color:var(--warn);border-color:rgba(242,139,130,.4)}
+  .agent-strip{display:none;align-items:center;justify-content:space-between;gap:8px;background:var(--surf);border:1px solid var(--bdr);border-radius:14px;padding:7px 12px;margin-bottom:8px;font-size:12px}
+  .agent-strip.show{display:flex}
+  .agent-strip-tag{font-weight:600;color:var(--acc);display:flex;align-items:center;gap:6px}
+  .agent-mini-btn{border:none;border-radius:10px;padding:4px 9px;font-size:11.5px;font-weight:600;cursor:pointer;background:var(--surf2);color:var(--txt)}
+  .agent-mini-btn.warn{background:rgba(242,139,130,.16);color:var(--warn)}
+
   .preview-bar{display:none;align-items:center;gap:8px;background:var(--surf);padding:8px 12px;border-radius:16px 16px 0 0;margin-bottom:-8px;padding-bottom:14px;font-size:13px;color:var(--acc)}
   .preview-bar.show{display:flex}
   .preview-bar img{height:36px;width:36px;object-fit:cover;border-radius:8px}
-  .dock{background:var(--surf);border-radius:28px;padding:8px 10px 8px 8px;display:flex;align-items:flex-end;gap:6px;position:relative;z-index:2}
-  .attach-btn{width:40px;height:40px;border-radius:20px;border:none;background:var(--surf2);color:var(--txt);display:grid;place-items:center;flex-shrink:0}
-  textarea.inp{flex:1;background:transparent;border:none;color:var(--txt);font-size:16px;resize:none;max-height:120px;outline:none;padding:8px 4px}
-  .send{width:40px;height:40px;border-radius:20px;border:none;background:var(--acc);color:var(--accTxt);display:grid;place-items:center;flex-shrink:0}
-  .drawer-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;z-index:30}
+  .dock{background:var(--surf);border:1px solid var(--bdr);border-radius:28px;padding:7px 8px;display:flex;align-items:flex-end;gap:6px;position:relative;z-index:2;transition:border-color .15s}
+  .dock.agent-active{border-color:var(--acc)}
+  .attach-btn,.agent-btn{width:38px;height:38px;border-radius:19px;border:none;background:var(--surf2);color:var(--txt);display:grid;place-items:center;flex-shrink:0;font-size:17px;cursor:pointer;transition:.15s}
+  .agent-btn.on{background:var(--acc);color:var(--accTxt)}
+  textarea.inp{flex:1;background:transparent;border:none;color:var(--txt);font-size:15.5px;resize:none;max-height:120px;outline:none;padding:8px 4px}
+  .send{width:38px;height:38px;border-radius:19px;border:none;background:var(--acc);color:var(--accTxt);display:grid;place-items:center;flex-shrink:0}
+
+  .drawer-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;z-index:30}
   .drawer-bg.open{display:flex}
-  .drawer{background:var(--surf);width:80%;max-width:300px;height:100%;padding:20px 14px;display:flex;flex-direction:column;gap:10px}
+  .drawer{background:var(--card);width:80%;max-width:300px;height:100%;padding:20px 14px;display:flex;flex-direction:column;gap:10px}
   .chat-item{padding:11px 12px;border-radius:14px;display:flex;justify-content:space-between;align-items:center;font-size:14px;color:var(--txt)}
   .chat-item.active{background:var(--surf2);color:var(--acc);font-weight:500}
-  .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:flex-end;z-index:25}
+
+  .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-end;z-index:25}
   .sheet-bg.open{display:flex}
-  .sheet{background:var(--surf);width:100%;border-radius:28px 28px 0 0;padding:20px 16px 32px;max-height:88dvh;overflow-y:auto}
-  .tabs-bar{display:flex;gap:6px;overflow-x:auto;padding:12px 0 4px;scrollbar-width:none}
-  .tabs-bar::-webkit-scrollbar{display:none}
-  .tab-chip{background:var(--surf2);color:var(--sub);border:1px solid rgba(255,255,255,.06);padding:6px 13px;border-radius:16px;font-size:12.5px;font-weight:500;white-space:nowrap}
-  .tab-chip.active{background:var(--acc);color:var(--accTxt);border-color:var(--acc);font-weight:600}
+  .sheet{background:var(--card);width:100%;border-radius:28px 28px 0 0;padding:18px 16px 28px;max-height:88dvh;overflow-y:auto}
+  .sheet-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+  .sheet-head-left{display:flex;align-items:center;gap:8px}
+  .back-btn{width:32px;height:32px;border-radius:16px;border:none;background:var(--surf);color:var(--txt);display:none;place-items:center;font-size:16px;cursor:pointer}
+  .back-btn.show{display:grid}
+
+  /* Вертикальный минималистичный список категорий настроек */
+  .set-cat-list{display:flex;flex-direction:column;gap:8px}
+  .set-cat-item{display:flex;align-items:center;gap:12px;padding:13px 14px;background:var(--surf);border:1px solid var(--bdr);border-radius:18px;cursor:pointer;text-align:left;width:100%;color:var(--txt);transition:transform .1s}
+  .set-cat-item:active{transform:scale(.99)}
+  .set-cat-ico{width:38px;height:38px;border-radius:12px;background:var(--card);border:1px solid var(--bdr);display:grid;place-items:center;font-size:18px;flex-shrink:0}
+  .set-cat-info{flex:1;min-width:0}
+  .set-cat-title{font-size:14.5px;font-weight:600;color:var(--txt)}
+  .set-cat-desc{font-size:12px;color:var(--sub);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .set-cat-chev{color:var(--sub);font-size:18px;font-weight:500}
+
+  .set-subview{display:none}
+  .set-subview.active{display:block}
+  .card{background:var(--surf);border:1px solid var(--bdr);border-radius:20px;padding:15px}
+  .grp-sub{font-size:12px;color:var(--sub);margin-bottom:6px}
+  .btn{width:100%;margin-top:12px;padding:12px;border-radius:14px;border:none;background:var(--acc);color:var(--accTxt);font-weight:600;font-size:14px;cursor:pointer}
+  .btn.sec{background:var(--surf);color:var(--txt);border:1px solid var(--bdr)}
   .preset-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
-  .preset-chip,.preset-btn{background:var(--surf);color:var(--acc);border:1px solid rgba(168,199,250,.25);padding:5px 10px;border-radius:12px;font-size:11.5px;font-weight:500}
-  .sec-title{font-size:11.5px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--acc);margin:16px 4px 6px}
-  .card{background:var(--surf2);border:1px solid rgba(255,255,255,.06);border-radius:20px;padding:15px}
-  .grp-sub{font-size:12px;color:var(--sub);margin-bottom:4px}
-  .btn{width:100%;margin-top:12px;padding:12px;border-radius:14px;border:none;background:var(--acc);color:var(--accTxt);font-weight:600;font-size:14px}
-  .btn.sec{background:var(--surf2);color:var(--txt);border:1px solid rgba(255,255,255,.08)}
-  .os-hero{background:linear-gradient(135deg,#1d293e 0%,#261e38 55%,#1b232e 100%);border:1px solid rgba(168,199,250,.22);border-radius:24px;padding:18px;position:relative;overflow:hidden}
-  .os-tag{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--acc);font-weight:600}
-  .os-soc{font-size:20px;font-weight:700;color:#fff;margin-top:4px;line-height:1.25}
-  .os-dev{font-size:12px;color:#b8c4d9;margin-top:2px}
+  .preset-chip{background:var(--card);color:var(--acc);border:1px solid var(--bdr);padding:5px 10px;border-radius:12px;font-size:11.5px;font-weight:600;cursor:pointer}
+
+  /* Адаптивная карточка оборудования (тёмная и светлая тема) */
+  .os-hero{background:var(--hero-bg);border:1px solid var(--hero-bdr);border-radius:22px;padding:16px;position:relative;overflow:hidden}
+  .os-tag{font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--acc);font-weight:700}
+  .os-soc{font-size:19px;font-weight:700;color:var(--hero-txt);margin-top:4px;line-height:1.25}
+  .os-dev{font-size:12px;color:var(--hero-sub);margin-top:2px}
   .bento{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
-  .bento-box{background:rgba(255,255,255,.06);backdrop-filter:blur(8px);border-radius:16px;padding:10px 12px}
-  .bento-lbl{font-size:11px;color:#9aa0a6}
-  .bento-val{font-size:14px;font-weight:600;color:#fff;margin-top:2px}
-  .sup-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:12.5px}
+  .bento-box{background:var(--bento-bg);border:1px solid var(--bdr);border-radius:14px;padding:10px 12px}
+  .bento-lbl{font-size:11px;color:var(--sub)}
+  .bento-val{font-size:13.5px;font-weight:600;color:var(--hero-txt);margin-top:2px}
+  .sup-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bdr);font-size:12.5px;color:var(--hero-txt)}
   .sup-row:last-child{border-bottom:none}
-  .set-row{margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.05)}
-  .set-row:first-of-type{margin-top:8px;padding-top:0;border-top:none}
+
+  .set-row{margin-top:14px;padding-top:12px;border-top:1px solid var(--bdr)}
+  .set-row:first-of-type{margin-top:4px;padding-top:0;border-top:none}
   .set-head{display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:6px}
   .set-hint{font-size:11.5px;color:var(--sub);margin-top:3px}
   input[type=range]{width:100%;accent-color:var(--acc)}
-  select,textarea.sys-inp{width:100%;background:var(--surf);color:var(--txt);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px 12px;font-size:14px;outline:none}
+  select,textarea.sys-inp{width:100%;background:var(--card);color:var(--txt);border:1px solid var(--bdr);border-radius:14px;padding:10px 12px;font-size:14px;outline:none}
 
-  body.light-theme {
-    --bg: #f6f4ef;
-    --surf: #ebe8e0;
-    --surf2: #e3dfd5;
-    --card: #ffffff;
-    --txt: #1c1b18;
-    --sub: #6b685f;
-    --acc: #2b59c3;
-    --accTxt: #ffffff;
-    --bdr: #dcd8ce;
-  }
-  body.light-theme .msg-u { background: #e3dfd5; color: #1c1b18; }
-  body.light-theme .bot-txt { color: #1c1b18; }
-  body.light-theme .stats-bar { background: #ebe8e0; color: #2b59c3; }
+  .msg-act-sheet{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:none;align-items:flex-end;justify-content:center}
+  .msg-act-sheet.open{display:flex}
+  .msg-act-box{width:100%;max-width:520px;background:var(--card);color:var(--txt);border-radius:22px 22px 0 0;padding:12px 16px 22px;box-shadow:0 -8px 32px rgba(0,0,0,.35);animation:slideUp .18s ease-out}
+  @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  .sheet-grab{width:38px;height:4px;background:var(--sub);opacity:.4;border-radius:4px;margin:0 auto 14px}
+  .act-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+  .act-tile{background:var(--surf);border:1px solid var(--bdr);border-radius:14px;padding:10px 4px;text-align:center;font-size:11.5px;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px}
+  .act-tile span.ico{font-size:18px}
+  .act-list{background:var(--surf);border:1px solid var(--bdr);border-radius:14px;overflow:hidden;margin-bottom:12px}
+  .act-item{padding:12px 14px;font-size:13.5px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--bdr);cursor:pointer}
+  .act-item:last-child{border-bottom:none}
+  .act-item.danger{color:var(--warn)}
+  .act-meta{font-size:11.5px;color:var(--sub);text-align:center;line-height:1.55}
 
-  .msg-act-sheet {
-    position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 9999;
-    display: none; align-items: flex-end; justify-content: center;
-  }
-  .msg-act-sheet.open { display: flex; }
-  .msg-act-box {
-    width: 100%; max-width: 520px; background: var(--card); color: var(--txt);
-    border-radius: 22px 22px 0 0; padding: 12px 16px 22px; box-shadow: 0 -8px 32px rgba(0,0,0,.45);
-    animation: slideUp .18s ease-out;
-  }
-  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-  .sheet-grab { width: 38px; height: 4px; background: #666; border-radius: 4px; margin: 0 auto 14px; }
-  .act-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
-  .act-tile {
-    background: var(--surf); border: 1px solid var(--bdr); border-radius: 14px;
-    padding: 10px 4px; text-align: center; font-size: 11.5px; font-weight: 600; cursor: pointer;
-    display: flex; flex-direction: column; align-items: center; gap: 5px;
-  }
-  .act-tile span.ico { font-size: 18px; }
-  .act-list {
-    background: var(--surf); border: 1px solid var(--bdr); border-radius: 14px;
-    overflow: hidden; margin-bottom: 12px;
-  }
-  .act-item {
-    padding: 12px 14px; font-size: 13.5px; display: flex; align-items: center; gap: 10px;
-    border-bottom: 1px solid var(--bdr); cursor: pointer;
-  }
-  .act-item:last-child { border-bottom: none; }
-  .act-item.danger { color: #f28b82; }
-  .act-meta { font-size: 11.5px; color: var(--sub); text-align: center; line-height: 1.55; }
-
-  .fam-card { background: var(--card); border: 1px solid var(--bdr); border-radius: 16px; padding: 14px; margin-top: 12px; }
-  .fam-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-  .fam-title { font-size: 15.5px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .fam-arrow {
-    background: var(--surf); border: 1px solid var(--bdr); color: var(--txt);
-    border-radius: 10px; padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
-  }
-  .fam-desc { font-size: 12.5px; color: var(--sub); margin-top: 5px; line-height: 1.4; }
-  .ver-drawer { display: none; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--bdr); }
-  .ver-drawer.open { display: block; }
-  .ver-item { background: var(--surf); border-radius: 12px; padding: 10px 12px; margin-top: 8px; border: 1px solid var(--bdr); }
-  .prog-wrap { width: 100%; height: 8px; background: #141517; border-radius: 99px; overflow: hidden; margin-top: 6px; }
-  .prog-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #4285f4, #a8c7fa); transition: width .2s ease; }
-  .btn-del {
-    background: rgba(242,139,130,.15); color: #f28b82; border: 1px solid rgba(242,139,130,.35);
-    border-radius: 10px; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
-  }
+  .fam-card{background:var(--surf);border:1px solid var(--bdr);border-radius:18px;padding:14px;margin-top:12px}
+  .fam-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .fam-title{font-size:15.5px;font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .fam-arrow{background:var(--card);border:1px solid var(--bdr);color:var(--txt);border-radius:10px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer}
+  .fam-desc{font-size:12.5px;color:var(--sub);margin-top:5px;line-height:1.4}
+  .ver-drawer{display:none;margin-top:10px;padding-top:8px;border-top:1px solid var(--bdr)}
+  .ver-drawer.open{display:block}
+  .ver-item{background:var(--card);border-radius:12px;padding:10px 12px;margin-top:8px;border:1px solid var(--bdr)}
+  .prog-wrap{width:100%;height:8px;background:var(--surf2);border-radius:99px;overflow:hidden;margin-top:6px}
+  .prog-fill{height:100%;width:0%;background:linear-gradient(90deg,#4285f4,var(--acc));transition:width .2s ease}
+  .btn-del{background:rgba(242,139,130,.15);color:var(--warn);border:1px solid rgba(242,139,130,.35);border-radius:10px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer}
 </style>
 </head>
 <body>
@@ -167,24 +189,27 @@
 <main id="chat"></main>
 
 <footer>
-  <div class="agent-bar">
-    <button type="button" class="agent-pill" id="agentToggleBtn" onclick="toggleAgentMode()">🤖 Агент: ВЫКЛ</button>
-    <button type="button" class="agent-pill warn" id="agentPermHint" style="display:none" onclick="VoltAndroid.openAccessibilitySettings()">⚠️ Включить доступ к экрану</button>
-    <button type="button" class="agent-pill" id="wsBadge" style="display:none" onclick="alert('Рабочая папка агента для кода и файлов:\n/sdcard/Download/VoltWorkspace')">📁 VoltWorkspace</button>
+  <div class="agent-strip" id="agentStrip">
+    <div class="agent-strip-tag">🤖 Режим агента • Экран и файлы</div>
+    <div style="display:flex;gap:6px">
+      <button type="button" class="agent-mini-btn warn" id="agentPermHint" style="display:none" onclick="VoltAndroid.openAccessibilitySettings()">Доступ к экрану</button>
+      <button type="button" class="agent-mini-btn" onclick="alert('Рабочая папка агента для кода и файлов:\n/sdcard/Download/VoltWorkspace')">📁 Папка</button>
+    </div>
   </div>
   <div class="preview-bar" id="previewBar">
     <img id="prevImg" style="display:none">
     <span id="prevLabel" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
     <button onclick="clearAttachment()" style="background:none;border:none;color:var(--sub);font-size:18px">✕</button>
   </div>
-  <div class="dock">
+  <div class="dock" id="inputDock">
     <input type="file" id="fileInp" style="display:none" accept="image/*,.txt,.md,.py,.cpp,.c,.h,.kt,.java,.js,.json,.html,.css,.csv,.xml,.log" onchange="handleFile(this)">
-    <button class="attach-btn" onclick="document.getElementById('fileInp').click()">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
+    <button class="attach-btn" title="Прикрепить" onclick="document.getElementById('fileInp').click()">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
     </button>
+    <button class="agent-btn" id="agentToggleBtn" title="Режим агента" onclick="toggleAgentMode()">🤖</button>
     <textarea class="inp" id="inp" rows="1" placeholder="Спросите Volt..." oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
     <button class="send" id="sendBtn" onclick="send()">
-      <svg id="sendIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      <svg id="sendIcon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
     </button>
   </div>
 </footer>
@@ -194,7 +219,7 @@
     <button class="btn" style="margin-top:0" onclick="createNewChat();closeDrawer()">+ Новый чат</button>
     <div style="font-size:12px;color:var(--sub);margin-top:8px">Недавние чаты</div>
     <div id="chatList" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
-    <button class="btn sec" onclick="closeDrawer();openSettings()">⚙ Настройки и процессор</button>
+    <button class="btn sec" onclick="closeDrawer();openSettings()">⚙ Настройки</button>
   </div>
 </div>
 
@@ -212,43 +237,101 @@
 
 <div class="sheet-bg" id="settingsSheet" onclick="if(event.target===this)closeSheets()">
   <div class="sheet">
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <h3>Настройки Volt AI</h3>
-      <button onclick="closeSheets()" style="background:none;border:none;color:var(--sub);font-size:18px">✕</button>
-    </div>
-
-    <div class="tabs-bar">
-      <button class="tab-chip active" onclick="filterSettings('all', this)">Все разделы</button>
-      <button class="tab-chip" onclick="filterSettings('hw', this)">Процессор</button>
-      <button class="tab-chip" onclick="filterSettings('gen', this)">Генерация</button>
-      <button class="tab-chip" onclick="filterSettings('perf', this)">Память и CPU</button>
-      <button class="tab-chip" onclick="filterSettings('ui', this)">Интерфейс и ИИ</button>
-    </div>
-
-    <div class="set-grp" data-grp="hw">
-      <div class="sec-title">1. Оборудование и совместимость</div>
-      <div class="os-hero" id="hwCard">
-        <div class="os-tag">VOLTAGE ENGINE • HARDWARE</div>
-        <div class="os-soc" id="hwSoc">Определение чипа...</div>
-        <div class="os-dev" id="hwDev"></div>
-        <div class="bento">
-          <div class="bento-box"><div class="bento-lbl">Архитектура</div><div class="bento-val" id="hwCores">—</div></div>
-          <div class="bento-box"><div class="bento-lbl">Оперативная память</div><div class="bento-val" id="hwRam">—</div></div>
-          <div class="bento-box" style="grid-column:span 2"><div class="bento-lbl">Инструкции ускорения AI</div><div class="bento-val" id="hwSimd">—</div></div>
-        </div>
-        <div style="margin-top:14px;font-size:12px;color:#b8c4d9;font-weight:600">Совместимость моделей</div>
-        <div id="hwSupported" style="margin-top:4px"></div>
+    <div class="sheet-head">
+      <div class="sheet-head-left">
+        <button type="button" class="back-btn" id="setBackBtn" onclick="showSettingsHome()">←</button>
+        <h3 id="setHeaderTitle">Настройки</h3>
       </div>
+      <button onclick="closeSheets()" style="background:none;border:none;color:var(--sub);font-size:18px;padding:4px">✕</button>
     </div>
 
-    <div class="set-grp" data-grp="gen">
-      <div class="sec-title">2. Параметры генерации</div>
+    <!-- Главная страница настроек: вертикальный столбик категорий -->
+    <div id="setHomeView" class="set-cat-list">
+      <button type="button" class="set-cat-item" onclick="openSettingsSection('ui', 'Внешний вид и ИИ')">
+        <div class="set-cat-ico">🎨</div>
+        <div class="set-cat-info">
+          <div class="set-cat-title">Внешний вид и ИИ</div>
+          <div class="set-cat-desc">Светлая тема, статистика, системный стиль</div>
+        </div>
+        <div class="set-cat-chev">›</div>
+      </button>
+
+      <button type="button" class="set-cat-item" onclick="openSettingsSection('gen', 'Генерация')">
+        <div class="set-cat-ico">✨</div>
+        <div class="set-cat-info">
+          <div class="set-cat-title">Генерация</div>
+          <div class="set-cat-desc">Температура, Top-P, максимальная длина ответа</div>
+        </div>
+        <div class="set-cat-chev">›</div>
+      </button>
+
+      <button type="button" class="set-cat-item" onclick="openSettingsSection('perf', 'Память и процессор')">
+        <div class="set-cat-ico">⚡</div>
+        <div class="set-cat-info">
+          <div class="set-cat-title">Память и процессор</div>
+          <div class="set-cat-desc">Потоки CPU и размер окна контекста</div>
+        </div>
+        <div class="set-cat-chev">›</div>
+      </button>
+
+      <button type="button" class="set-cat-item" onclick="openSettingsSection('api', 'Локальный API-сервер')">
+        <div class="set-cat-ico">🌐</div>
+        <div class="set-cat-info">
+          <div class="set-cat-title">Локальный API-сервер</div>
+          <div class="set-cat-desc">OpenAI-сервер 127.0.0.1:8080 для Telegram и скриптов</div>
+        </div>
+        <div class="set-cat-chev">›</div>
+      </button>
+
+      <button type="button" class="set-cat-item" onclick="openSettingsSection('hw', 'Оборудование')">
+        <div class="set-cat-ico">📱</div>
+        <div class="set-cat-info">
+          <div class="set-cat-title">Оборудование</div>
+          <div class="set-cat-desc">Характеристики чипа, RAM и совместимые модели</div>
+        </div>
+        <div class="set-cat-chev">›</div>
+      </button>
+    </div>
+
+    <!-- Подэкран: Внешний вид и ИИ -->
+    <div id="setSub_ui" class="set-subview">
+      <div class="card">
+        <div class="set-row" style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:14px;font-weight:500">Светлая тема</div>
+            <div class="set-hint">Светлое минималистичное оформление интерфейса</div>
+          </div>
+          <input type="checkbox" id="setLightTheme" style="width:20px;height:20px;accent-color:var(--acc)" onchange="toggleThemeMode(this.checked)">
+        </div>
+        <div class="set-row" style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:14px;font-weight:500">Статистика генерации</div>
+            <div class="set-hint">Скорость (ток/с), токены и бейдж Vision под ответом</div>
+          </div>
+          <input type="checkbox" id="setStats" style="width:20px;height:20px;accent-color:var(--acc)">
+        </div>
+        <div class="set-row">
+          <div class="set-head"><span>Стиль ответов нейросети</span></div>
+          <div class="preset-row">
+            <button type="button" class="preset-chip" onclick="applyPreset('turbo')">⚡ Кратко</button>
+            <button type="button" class="preset-chip" onclick="applyPreset('std')">Стандарт</button>
+            <button type="button" class="preset-chip" onclick="applyPreset('free')">Свободный</button>
+          </div>
+          <textarea class="sys-inp" id="setSys" rows="3"></textarea>
+        </div>
+      </div>
+      <button class="btn" onclick="saveSettings()">Сохранить</button>
+      <button class="btn sec" onclick="resetSettings()">Сбросить по умолчанию</button>
+    </div>
+
+    <!-- Подэкран: Генерация -->
+    <div id="setSub_gen" class="set-subview">
       <div class="card">
         <div class="grp-sub">Точность фактов, креативность и длина ответов</div>
         <div class="set-row">
           <div class="set-head"><span>Температура</span><b id="valTemp">0.6</b></div>
           <input type="range" id="setTemp" min="0.1" max="1.5" step="0.1" oninput="document.getElementById('valTemp').innerText=this.value">
-          <div class="set-hint">0.2–0.5 для кода и фото • 0.7–1.0 для свободного диалога</div>
+          <div class="set-hint">0.2–0.5 для кода и фото • 0.7–1.0 для диалога</div>
         </div>
         <div class="set-row">
           <div class="set-head"><span>Top-P (ширина словаря)</span><b id="valTopP">0.9</b></div>
@@ -259,67 +342,58 @@
           <input type="range" id="setMax" min="256" max="2048" step="128" oninput="document.getElementById('valMax').innerText=this.value+' ток.'">
         </div>
       </div>
+      <button class="btn" onclick="saveSettings()">Сохранить</button>
     </div>
 
-    <div class="set-grp" data-grp="perf">
-      <div class="sec-title">3. Производительность и память</div>
+    <!-- Подэкран: Память и процессор -->
+    <div id="setSub_perf" class="set-subview">
       <div class="card">
-        <div class="grp-sub">Скорость генерации (ток/с), нагрев и расход RAM</div>
+        <div class="grp-sub">Баланс скорости (ток/с), нагрева и расхода RAM</div>
         <div class="set-row">
           <div class="set-head"><span>Рабочие потоки CPU</span><b id="valThreads">4 ядер</b></div>
-          <input type="range" id="setThreads" min="2" max="8" step="1" oninput="document.getElementById('valThreads').innerText=this.value+' ядер'">
-          <div class="set-hint">Для Snapdragon 7 Gen 1 пик скорости на 4 потоках (big-кластер)</div>
+          <input type="range" id="setThreads" min="2" max="6" step="1" oninput="document.getElementById('valThreads').innerText=this.value+' ядер'">
+          <div class="set-hint">Для Snapdragon 7 Gen 1 оптимум — 4 потока</div>
         </div>
         <div class="set-row">
           <div class="set-head"><span>Окно контекста (память диалога)</span></div>
           <select id="setCtx">
-            <option value="2048">2048 токенов — экономия RAM (лучше для 3B Vision)</option>
-            <option value="4096">4096 токенов — сбалансированный стандарт</option>
-            <option value="8192">8192 токенов — длинные файлы и история</option>
+            <option value="2048">2048 токенов — стабильно и экономит RAM (рекомендовано)</option>
+            <option value="4096">4096 токенов — длинные диалоги (требует больше RAM)</option>
           </select>
         </div>
       </div>
+      <button class="btn" onclick="saveSettings()">Применить и перезагрузить модель</button>
     </div>
 
-    <div class="set-grp" data-grp="ui">
-      <div class="sec-title">4. Интерфейс и поведение ИИ</div>
+    <!-- Подэкран: Локальный API-сервер -->
+    <div id="setSub_api" class="set-subview">
       <div class="card">
-        <div class="set-row" style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div style="font-size:13.5px">Светлая кремовая тема (LocalMind)</div>
-            <div class="set-hint">Переключение между тёмной VOLTAGE и светлой палитрой</div>
-          </div>
-          <input type="checkbox" id="setLightTheme" style="width:20px;height:20px;accent-color:var(--acc)" onchange="toggleThemeMode(this.checked)">
-        </div>
         <div class="set-row">
-          <div class="set-head"><span>Локальный OpenAI API-сервер (Telegram)</span><b id="srvStatusBadge" style="color:#9aa0a6">○ Остановлен</b></div>
-          <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
-            <button type="button" id="srvToggleBtn" onclick="toggleLocalServerUi()" style="flex:1;padding:9px 12px;border-radius:10px;border:none;background:var(--acc);color:var(--accTxt);font-weight:700;cursor:pointer">Запустить сервер :8080</button>
-            <button type="button" onclick="copyServerUrl()" style="padding:9px 12px;border-radius:10px;border:1px solid var(--bdr);background:var(--surf);color:var(--txt);font-size:12px;cursor:pointer">📋 URL</button>
+          <div class="set-head"><span>Статус сервера</span><b id="srvStatusBadge" style="color:var(--sub)">○ Остановлен</b></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+            <button type="button" id="srvToggleBtn" onclick="toggleLocalServerUi()" class="btn" style="flex:1;margin-top:0">Запустить :8080</button>
+            <button type="button" onclick="copyServerUrl()" class="btn sec" style="width:auto;margin-top:0;padding:12px 14px">📋 URL</button>
           </div>
-          <div class="set-hint">Endpoint для ботов и плагинов Telegram: <code>http://127.0.0.1:8080/v1</code></div>
-        </div>
-        <div class="set-row" style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div style="font-size:13.5px">Статистика генерации</div>
-            <div class="set-hint">Скорость (ток/с), токены и бейдж Vision под ответом</div>
-          </div>
-          <input type="checkbox" id="setStats" style="width:20px;height:20px;accent-color:var(--acc)">
-        </div>
-        <div class="set-row">
-          <div class="set-head"><span>Стиль ответов нейросети</span></div>
-          <div class="preset-row">
-            <button type="button" class="preset-btn" onclick="applyPreset('turbo')">⚡ Турбо (&lt;1s TTFT)</button>
-            <button type="button" class="preset-chip" onclick="applyPreset('std')">Стандарт</button>
-            <button type="button" class="preset-chip" onclick="applyPreset('free')">Свободный чат</button>
-          </div>
-          <textarea class="sys-inp" id="setSys" rows="3"></textarea>
+          <div class="set-hint" style="margin-top:8px">Endpoint для ботов и плагинов: <code>http://127.0.0.1:8080/v1</code></div>
         </div>
       </div>
     </div>
 
-    <button class="btn" onclick="saveSettings()">Применить настройки</button>
-    <button class="btn sec" onclick="resetSettings()">Сбросить по умолчанию</button>
+    <!-- Подэкран: Оборудование -->
+    <div id="setSub_hw" class="set-subview">
+      <div class="os-hero" id="hwCard">
+        <div class="os-tag">VOLTAGE ENGINE • HARDWARE</div>
+        <div class="os-soc" id="hwSoc">Определение чипа...</div>
+        <div class="os-dev" id="hwDev"></div>
+        <div class="bento">
+          <div class="bento-box"><div class="bento-lbl">Архитектура</div><div class="bento-val" id="hwCores">—</div></div>
+          <div class="bento-box"><div class="bento-lbl">Оперативная память</div><div class="bento-val" id="hwRam">—</div></div>
+          <div class="bento-box" style="grid-column:span 2"><div class="bento-lbl">Инструкции ускорения AI</div><div class="bento-val" id="hwSimd">—</div></div>
+        </div>
+        <div style="margin-top:14px;font-size:12px;color:var(--hero-sub);font-weight:600">Совместимость моделей</div>
+        <div id="hwSupported" style="margin-top:4px"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -328,60 +402,50 @@ let agentMode = false;
 let agentGoal = '';
 let agentStep = 0;
 let agentHistory = [];
-let pendingAgentVisionUrl = '';
-const MAX_AGENT_STEPS = 8;
+let lastAgentActionKey = '';
+const MAX_AGENT_STEPS = 6;
+const ONE_SHOT_ACTIONS = new Set(['open_app', 'flashlight', 'set_alarm', 'set_timer', 'search_web', 'open_settings']);
 
-const AGENT_SYS_PROMPT = `Ты — автономный AI-агент Volt (как Claude Code + управление смартфоном Android).
-Ты умеешь:
-1. Видеть UI-дерево экрана (элементы с id, text, xy) и при необходимости делать скриншот экрана.
-2. Управлять телефоном: открывать приложения, нажимать кнопки, вводить текст, листать, ставить будильники, включать фонарик.
-3. Создавать проекты, писать/читать/редактировать код и файлы в папке /sdcard/Download/VoltWorkspace, а также выполнять shell-команды.
+const AGENT_SYS_PROMPT = `Ты — автономный AI-агент Volt (код/файлы и управление Android).
+Отвечай СТРОГО одним JSON-объектом без лишнего текста:
+{"action":"КОМАНДА","target":"ПАРАМЕТР","value":"ДОП"}
 
-Отвечай СТРОГО одним JSON-объектом без лишнего текста до или после:
-{"action":"КОМАНДА","target":"ПАРАМЕТР","value":"ДОП_ДАННЫЕ"}
-
-Доступные команды:
-- open_app (target: имя приложения, например "YouTube", "Настройки", "Telegram")
-- click_id (target: номер id элемента из списка экрана, например "3")
-- click (target: точный текст кнопки на экране)
-- tap_xy (target: "x,y" из координат элемента)
-- input_text (target: "текст для ввода", value: "id_поля_или_пусто")
+Команды:
+- open_app (target: имя приложения)
+- click_id (target: номер id элемента с экрана)
+- click (target: точный текст кнопки)
+- tap_xy (target: "x,y")
+- input_text (target: "текст", value: "id_поля")
 - scroll (target: "down") / scroll_up (target: "up")
 - back (target: "") / home (target: "")
-- look_screen (target: "что проверить на скриншоте" — делает снимок экрана для Vision-анализа)
+- look_screen (target: "что проверить на скриншоте")
 - set_alarm (target: "ЧЧ:ММ", value: "название") / set_timer (target: "секунды")
 - flashlight (target: "on" или "off")
-- search_web (target: "поисковый запрос")
-- list_files (target: "." или относительный путь в VoltWorkspace)
-- read_file (target: "путь/к/файлу")
-- write_file (target: "путь/к/файлу", value: "полный код или текст файла")
-- append_file (target: "путь/к/файлу", value: "добавляемый текст")
-- delete_file (target: "путь/к/файлу")
-- run_shell (target: "команда sh, например python3 app.py или ls -la")
-- done (target: "подробный отчёт пользователю о выполненной работе")
+- search_web (target: "запрос")
+- list_files (target: ".") / read_file (target: "путь")
+- write_file (target: "путь", value: "код или текст")
+- run_shell (target: "команда sh")
+- done (target: "отчёт о выполнении")
 
-Правила:
-- Если пользователь просит написать код/скрипт/сайт/заметку — создай файл через write_file и при необходимости проверь через run_shell, затем вызови done.
-- Если нужно действие в телефоне — выполняй по одному шагу за раз, проверяя обновлённый экран.
-- Когда цель выполнена — обязательно верни {"action":"done","target":"..."}.`;
+Если действие уже выполнено — сразу верни {"action":"done","target":"..."}.`;
 
 function refreshAgentBar() {
   const btn = document.getElementById('agentToggleBtn');
+  const strip = document.getElementById('agentStrip');
   const hint = document.getElementById('agentPermHint');
-  const ws = document.getElementById('wsBadge');
+  const dock = document.getElementById('inputDock');
   const inp = document.getElementById('inp');
   if (agentMode) {
     btn.classList.add('on');
-    btn.innerText = '🤖 Агент: ВКЛ';
-    ws.style.display = 'inline-flex';
-    inp.placeholder = 'Задача агенту (код, файлы или управление экраном)...';
+    strip.classList.add('show');
+    dock.classList.add('agent-active');
+    inp.placeholder = 'Задача агенту (код, файлы, экран)...';
     const hasAcc = (window.VoltAndroid && VoltAndroid.isAgentAccessibilityEnabled) ? VoltAndroid.isAgentAccessibilityEnabled() : false;
-    hint.style.display = hasAcc ? 'none' : 'inline-flex';
+    hint.style.display = hasAcc ? 'none' : 'inline-block';
   } else {
     btn.classList.remove('on');
-    btn.innerText = '🤖 Агент: ВЫКЛ';
-    ws.style.display = 'none';
-    hint.style.display = 'none';
+    strip.classList.remove('show');
+    dock.classList.remove('agent-active');
     inp.placeholder = 'Спросите Volt...';
   }
 }
@@ -396,10 +460,11 @@ window.addEventListener('focus', () => {
 });
 
 const DEFAULT_CFG = {
-  temp: 0.6, topP: 0.9, maxTokens: 1024, threads: 4, ctx: 4096, showStats: true,
+  temp: 0.6, topP: 0.9, maxTokens: 1024, threads: 4, ctx: 2048, showStats: true, lightTheme: false,
   sysPrompt: 'Отвечай чётко, структурированно и по делу на русском языке, используя Markdown.'
 };
 let cfg = Object.assign({}, DEFAULT_CFG, JSON.parse(localStorage.getItem('volt_cfg') || '{}'));
+if (cfg.ctx > 4096) cfg.ctx = 2048;
 
 let freeRamMb = 2000, models = [], activeId = null, activeBotEl = null, activeStatsEl = null;
 let rawStream = '', genStartTs = 0, approxTokens = 0, lastStatsStr = '', generating = false;
@@ -417,7 +482,7 @@ function applyPreset(kind) {
     sysEl.value = DEFAULT_CFG.sysPrompt;
     tempEl.value = 0.6;
   } else if (kind === 'free') {
-    sysEl.value = 'Общайся свободно, прямо и по-дружески на русском языке, без лишних формальностей, отказов и нравоучений.';
+    sysEl.value = 'Общайся свободно, прямо и по-дружески на русском языке, без лишних формальностей.';
     tempEl.value = 0.8;
   }
   document.getElementById('valTemp').innerText = tempEl.value;
@@ -426,16 +491,12 @@ function applyPreset(kind) {
 function buildSystemPrompt(modelObj) {
   if (!modelObj) return cfg.sysPrompt;
   const visionCap = modelObj.vision
-    ? 'У тебя есть встроенное зрение (Vision): ты напрямую видишь прикреплённые изображения и подробно описываешь всё, что на них изображено.'
-    : 'Ты текстовая модель без зрения (работаешь только с текстом и файлами).';
-  const uncensoredCap = modelObj.uncensored
-    ? 'Ты работаешь в нейтральном свободном режиме без цензуры и моральных ограничений: отвечаешь на любые творческие и повседневные запросы без отказов и нотаций.'
-    : '';
+    ? 'У тебя есть встроенное зрение (Vision): ты напрямую видишь прикреплённые изображения и подробно описываешь их.'
+    : 'Ты текстовая модель без зрения (работаешь с текстом и файлами).';
   const baseInfo = modelObj.base_model ? modelObj.base_model : modelObj.params;
   const tierInfo = modelObj.tier ? modelObj.tier : modelObj.params;
-  return 'Ты — ' + modelObj.name + ' (' + tierInfo + ', база: ' + baseInfo + ') от бренда VOLTAGE. ' + visionCap + ' ' + uncensoredCap + ' ' +
-    'Отвечай прямо на вопрос пользователя. НЕ рассказывай о себе и своей модели, ЕСЛИ пользователь сам не спросил «кто ты», «какая ты модель» или «на чём ты работаешь». ' +
-    'Если же спросили о тебе — назови имя (' + modelObj.name + '), класс (' + tierInfo + ') и базовую модель (' + baseInfo + '). ' +
+  return 'Ты — ' + modelObj.name + ' (' + tierInfo + ', база: ' + baseInfo + ') от бренда VOLTAGE. ' + visionCap + ' ' +
+    'Отвечай прямо на вопрос пользователя. НЕ рассказывай о себе, если тебя об этом не спросили. ' +
     'Стиль: ' + cfg.sysPrompt;
 }
 
@@ -461,12 +522,21 @@ function closeDrawer(){ document.getElementById('drawerBg').classList.remove('op
 function openSheet(id){ document.getElementById(id).classList.add('open'); }
 function closeSheets(){ document.querySelectorAll('.sheet-bg').forEach(e=>e.classList.remove('open')); }
 
-function filterSettings(grp, btn) {
-  document.querySelectorAll('.tab-chip').forEach(el => el.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  document.querySelectorAll('.set-grp').forEach(el => {
-    el.style.display = (grp === 'all' || el.dataset.grp === grp) ? 'block' : 'none';
-  });
+function showSettingsHome() {
+  document.getElementById('setHomeView').style.display = 'flex';
+  document.querySelectorAll('.set-subview').forEach(el => el.classList.remove('active'));
+  document.getElementById('setBackBtn').classList.remove('show');
+  document.getElementById('setHeaderTitle').innerText = 'Настройки';
+}
+
+function openSettingsSection(secId, title) {
+  document.getElementById('setHomeView').style.display = 'none';
+  document.querySelectorAll('.set-subview').forEach(el => el.classList.remove('active'));
+  const target = document.getElementById('setSub_' + secId);
+  if (target) target.classList.add('active');
+  document.getElementById('setBackBtn').classList.add('show');
+  document.getElementById('setHeaderTitle').innerText = title;
+  if (secId === 'api') updateServerUiState();
 }
 
 function fillSettingsUi() {
@@ -476,8 +546,8 @@ function fillSettingsUi() {
   document.getElementById('valTopP').innerText = cfg.topP;
   document.getElementById('setMax').value = cfg.maxTokens;
   document.getElementById('valMax').innerText = cfg.maxTokens + ' ток.';
-  document.getElementById('setThreads').value = cfg.threads;
-  document.getElementById('valThreads').innerText = cfg.threads + ' ядер';
+  document.getElementById('setThreads').value = Math.min(cfg.threads, 6);
+  document.getElementById('valThreads').innerText = Math.min(cfg.threads, 6) + ' ядер';
   document.getElementById('setCtx').value = String(cfg.ctx);
   document.getElementById('setStats').checked = cfg.showStats;
   document.getElementById('setSys').value = cfg.sysPrompt;
@@ -488,7 +558,7 @@ function fillSettingsUi() {
 
 function openSettings() {
   fillSettingsUi();
-  filterSettings('all', document.querySelector('.tab-chip'));
+  showSettingsHome();
   if (window.VoltAndroid && VoltAndroid.getDeviceHardwareJson) {
     const hw = JSON.parse(VoltAndroid.getDeviceHardwareJson());
     document.getElementById('hwSoc').innerText = hw.soc;
@@ -499,7 +569,7 @@ function openSettings() {
     const supBox = document.getElementById('hwSupported');
     supBox.innerHTML = '';
     hw.supported.forEach(s => {
-      supBox.innerHTML += '<div class="sup-row"><div><b>' + s.tier + '</b><div style="font-size:11px;color:#9aa0a6">' + s.quant + '</div></div><span style="color:var(--ok);font-size:11.5px;text-align:right">' + s.status + '</span></div>';
+      supBox.innerHTML += '<div class="sup-row"><div><b>' + s.tier + '</b><div style="font-size:11px;color:var(--sub)">' + s.quant + '</div></div><span style="color:var(--ok);font-size:11.5px;text-align:right">' + s.status + '</span></div>';
     });
   }
   openSheet('settingsSheet');
@@ -507,6 +577,7 @@ function openSettings() {
 
 function resetSettings() {
   cfg = Object.assign({}, DEFAULT_CFG);
+  toggleThemeMode(cfg.lightTheme);
   fillSettingsUi();
 }
 
@@ -656,7 +727,7 @@ function handleFile(inp) {
       const am = models.find(x => x.id === activeId);
       lbl.innerText = (am && am.vision)
         ? '👁 Фото готово для ' + am.name
-        : '⚠️ Для анализа фото выбери модель с Vision (Neutron v2.6 / Plasma v2.5)';
+        : '⚠️ Для анализа фото выбери модель с Vision';
       bar.classList.add('show');
       pendingAttachment = { type: 'image', name: file.name, dataUrl: reader.result, extracted: '' };
       if (window.VoltAndroid && VoltAndroid.recognizeImageOcr) {
@@ -670,7 +741,7 @@ function handleFile(inp) {
       imgEl.style.display = 'none';
       lbl.innerText = '📎 ' + file.name;
       bar.classList.add('show');
-      pendingAttachment = { type: 'file', name: file.name, content: reader.result.slice(0, 8000) };
+      pendingAttachment = { type: 'file', name: file.name, content: reader.result.slice(0, 6000) };
     };
     reader.readAsText(file);
   }
@@ -724,9 +795,7 @@ function deleteModelUi(id, name) {
   if (window.VoltAndroid && VoltAndroid.deleteModel && VoltAndroid.deleteModel(id)) {
     const m = models.find(x => x.id === id);
     if (m) m.downloaded = false;
-    if (id.startsWith('custom-')) {
-      models = models.filter(x => x.id !== id);
-    }
+    if (id.startsWith('custom-')) models = models.filter(x => x.id !== id);
     if (activeId === id) {
       activeId = '';
       const lbl = document.getElementById('curModelName');
@@ -744,7 +813,7 @@ function renderModels() {
     'Volt Plasma': 'Мультимодальный ИИ: анализ фото, конспектов и глубокий диалог',
     'Volt Neutron': 'Универсальный интеллект для логики, кода, учёбы и сложных текстов',
     'Volt Ion': 'Сбалансированная модель для быстрых повседневных задач без нагрузки',
-    'Volt Photon': 'Сверхлёгкая модель для мгновенных ответов и базового зрения'
+    'Volt Photon': 'Сверхлёгкая модель для мгновенных ответов без нагрузки на RAM'
   };
 
   const familiesMap = new Map();
@@ -758,11 +827,7 @@ function renderModels() {
       else fam = m.name.replace(/\s+v?\d+(\.\d+)?.*$/i, '').trim();
     }
     if (!familiesMap.has(fam)) {
-      familiesMap.set(fam, {
-        family: fam,
-        desc: m.family_desc || famDescMap[fam] || m.description,
-        items: []
-      });
+      familiesMap.set(fam, { family: fam, desc: m.family_desc || famDescMap[fam] || m.description, items: [] });
     }
     familiesMap.get(fam).items.push(m);
   });
@@ -782,7 +847,7 @@ function renderModels() {
       : '';
 
     const statusBadge = activeInFam
-      ? '<span style="font-size:11px;background:rgba(129,201,149,.18);color:#81c995;padding:2px 7px;border-radius:6px">● ' + (activeInFam.version || activeInFam.params) + '</span>'
+      ? '<span style="font-size:11px;background:rgba(129,201,149,.18);color:var(--ok);padding:2px 7px;border-radius:6px">● ' + (activeInFam.version || activeInFam.params) + '</span>'
       : (downloadedItems.length ? '<span style="font-size:11px;color:var(--acc)">Скачано: ' + downloadedItems.length + '</span>' : '');
 
     let primaryBtnHtml = '';
@@ -795,7 +860,7 @@ function renderModels() {
     } else {
       primaryBtnHtml = '<div id="act-' + primary.id + '" style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">' +
         '<button class="btn" style="flex:1;min-width:140px;margin-top:0" onclick="startDownload(\'' + primary.id + '\',\'' + primary.download_url + '\',\'' + (primary.mmproj_url || '') + '\')">⬇ Скачать (' + primary.size_mb + ' МБ)</button>' +
-        '<button type="button" class="btn sec" style="width:auto;margin-top:0;padding:10px 12px" onclick="downloadViaBrowser(\'' + primary.id + '\',\'' + primary.download_url + '\',\'' + (primary.mmproj_url || '') + '\')">🌐 В браузере</button>' +
+        '<button type="button" class="btn sec" style="width:auto;margin-top:0;padding:10px 12px" onclick="downloadViaBrowser(\'' + primary.id + '\',\'' + primary.download_url + '\',\'' + (primary.mmproj_url || '') + '\')">🌐 Браузер</button>' +
         '<button type="button" class="btn sec" style="width:auto;margin-top:0;padding:10px 12px" onclick="attachLocalFileToModel(\'' + primary.id + '\')">📂 Файл</button>' +
         '</div>';
     }
@@ -837,12 +902,12 @@ function downloadViaBrowser(id, url, mmUrl) {
     VoltAndroid.openExternalUrl(url);
     if (mmUrl) {
       setTimeout(() => {
-        if (confirm('Для этой модели с Vision нужен второй файл (mmproj). Открыть его скачивание в браузере?')) {
+        if (confirm('Для модели с Vision нужен второй файл (mmproj). Открыть его скачивание в браузере?')) {
           VoltAndroid.openExternalUrl(mmUrl);
         }
       }, 800);
     }
-    alert('Загрузка открыта в браузере!\nКогда файл скачается в папку Загрузки (Download), перезапустите Volt AI или нажмите «📂 Файл».');
+    alert('Загрузка открыта в браузере!\nПосле скачивания в Download перезапусти Volt AI или нажми «📂 Файл».');
   }
 }
 
@@ -850,8 +915,8 @@ function attachLocalFileToModel(id) {
   if (window.VoltAndroid && VoltAndroid.attachModelFile) {
     const el1 = document.getElementById('act-' + id);
     const el2 = document.getElementById('act-ver-' + id);
-    if (el1) el1.innerHTML = '<div style="font-size:12px;color:var(--acc)">⏳ Копирование файла в память Volt AI...</div>';
-    if (el2) el2.innerHTML = '<div style="font-size:12px;color:var(--acc)">⏳ Копирование файла в память Volt AI...</div>';
+    if (el1) el1.innerHTML = '<div style="font-size:12px;color:var(--acc)">⏳ Копирование файла...</div>';
+    if (el2) el2.innerHTML = '<div style="font-size:12px;color:var(--acc)">⏳ Копирование файла...</div>';
     VoltAndroid.attachModelFile(id);
   }
 }
@@ -904,7 +969,7 @@ window.onDownloadDone = (id) => {
   activateModel(id);
 };
 window.onDownloadError = (id, err) => {
-  const errHtml = '<div style="color:#f28b82;font-size:12px;margin-top:6px">Ошибка: ' + err + '</div>';
+  const errHtml = '<div style="color:var(--warn);font-size:12px;margin-top:6px">Ошибка: ' + err + '</div>';
   const el1 = document.getElementById('act-' + id);
   const el2 = document.getElementById('act-ver-' + id);
   if (el1) el1.innerHTML = errHtml;
@@ -913,7 +978,7 @@ window.onDownloadError = (id, err) => {
 
 function importLocalModel() {
   if (window.VoltAndroid && VoltAndroid.pickCustomModelFile) {
-    document.getElementById('importStatus').innerText = 'Выберите .gguf файл в проводнике...';
+    document.getElementById('importStatus').innerText = 'Выберите .gguf файл...';
     VoltAndroid.pickCustomModelFile();
   }
 }
@@ -990,7 +1055,7 @@ function send() {
           visionDataUrl = pendingAttachment.dataUrl;
           llmText = (txt ? txt + '. ' : '') + 'Опиши словами на русском языке, что изображено на этой фотографии (без координат).';
         } else {
-          llmText = (txt || 'Что на фото?') + (pendingAttachment.extracted ? '\n\n[Текст с фото]:\n' + pendingAttachment.extracted : '\n\n[Внимание: включена текстовая модель ' + activeModelObj.name + ' без Vision. Подскажи пользователю переключиться на модель с Vision в меню сверху.]');
+          llmText = (txt || 'Что на фото?') + (pendingAttachment.extracted ? '\n\n[Текст с фото]:\n' + pendingAttachment.extracted : '\n\n[Внимание: включена текстовая модель ' + activeModelObj.name + ' без Vision.]');
         }
       }
       clearAttachment();
@@ -1002,7 +1067,7 @@ function send() {
     saveChats();
     renderCurrentChat();
 
-    appendBotPlaceholder(agentMode ? '🤖 Агент анализирует экран и задачу...' : (visionDataUrl ? '👁 Обработка фото...' : 'Подготовка контекста...'));
+    appendBotPlaceholder(agentMode ? '🤖 Агент анализирует задачу...' : (visionDataUrl ? '👁 Обработка фото...' : 'Подготовка ответа...'));
 
     inp.value = '';
     inp.style.height = 'auto';
@@ -1012,12 +1077,13 @@ function send() {
       agentGoal = llmText;
       agentStep = 1;
       agentHistory = [];
-      pendingAgentVisionUrl = '';
+      lastAgentActionKey = '';
       const screenInfo = (VoltAndroid.getScreenUiState) ? VoltAndroid.getScreenUiState() : '';
-      const agentPrompt = `<|im_start|>user\nЦель: ${agentGoal}\nШаг ${agentStep}/${MAX_AGENT_STEPS}.\nТекущий экран UI:\n${screenInfo}<|im_end|>\n<|im_start|>assistant\n`;
-      VoltAndroid.sendPrompt(agentPrompt, AGENT_SYS_PROMPT, visionDataUrl, 0.15, cfg.topP, 512);
+      const agentPrompt = `<|im_start|>user\nЦель: ${agentGoal}\nШаг ${agentStep}/${MAX_AGENT_STEPS}.\nЭкран:\n${screenInfo}<|im_end|>\n<|im_start|>assistant\n`;
+      VoltAndroid.sendPrompt(agentPrompt, AGENT_SYS_PROMPT, visionDataUrl, 0.15, cfg.topP, 384);
     } else {
-      const recent = c.messages.slice(-16).map(m =>
+      // Берём до 8 последних сообщений, чтобы не перегружать контекст и RAM
+      const recent = c.messages.slice(-8).map(m =>
         m.role === 'user'
           ? '<|im_start|>user\n' + m.llmText + '<|im_end|>\n'
           : '<|im_start|>assistant\n' + m.text + '<|im_end|>\n'
@@ -1072,10 +1138,12 @@ window.onVoltDone = () => {
       try {
         const cmd = JSON.parse(match[0]);
         const actName = (cmd.action || cmd.cmd || '').toLowerCase();
-        if (actName === 'done' || agentStep >= MAX_AGENT_STEPS) {
-          const finalTxt = cmd.target || rawStream;
+        const actKey = actName + ':' + String(cmd.target || '').toLowerCase().trim();
+
+        if (actName === 'done' || agentStep >= MAX_AGENT_STEPS || (actKey === lastAgentActionKey && actKey !== ':')) {
+          const finalTxt = (actName === 'done' && cmd.target) ? cmd.target : 'Готово! Действие выполнено.';
           if (activeBotEl) activeBotEl.innerHTML = formatMd(finalTxt);
-          c.messages.push({ role: 'assistant', text: finalTxt, agentLog: '✅ Агент завершил задачу (шагов: ' + agentStep + ')', stats: lastStatsStr });
+          c.messages.push({ role: 'assistant', text: finalTxt, agentLog: '✅ Завершено (шагов: ' + agentStep + ')', stats: lastStatsStr });
           saveChats();
           renderCurrentChat();
           setGenerating(false);
@@ -1083,36 +1151,49 @@ window.onVoltDone = () => {
           activeStatsEl = null;
           return;
         }
+        lastAgentActionKey = actKey;
 
         let execRes = '';
         let nextVisionImg = '';
         if (actName === 'look_screen') {
           nextVisionImg = (VoltAndroid.captureScreenForAgent) ? VoltAndroid.captureScreenForAgent() : '';
-          execRes = nextVisionImg ? 'Снимок экрана передан в Vision-модель' : 'Не удалось сделать снимок (проверь Android 11+ и Accessibility)';
+          execRes = nextVisionImg ? 'Снимок экрана передан в Vision' : 'Нет доступа к снимку экрана';
         } else {
           execRes = VoltAndroid.executeAgentAction(match[0]);
         }
 
         const logLine = `⚡ Шаг ${agentStep} [${actName}]: ${execRes}`;
         agentHistory.push(logLine);
-        c.messages.push({ role: 'assistant', text: 'Выполняю действие: `' + actName + '`', agentLog: logLine, stats: lastStatsStr });
+
+        // Если это одиночная системная команда и цель короткая (например "Открой ютуб") — не зацикливаем
+        const hasAcc = (window.VoltAndroid && VoltAndroid.isAgentAccessibilityEnabled) ? VoltAndroid.isAgentAccessibilityEnabled() : false;
+        const isShortSingleGoal = ONE_SHOT_ACTIONS.has(actName) && (!hasAcc || agentGoal.trim().split(/\s+/).length <= 4);
+
+        c.messages.push({ role: 'assistant', text: isShortSingleGoal ? execRes : ('Выполняю: `' + actName + '`'), agentLog: logLine, stats: lastStatsStr });
         saveChats();
         renderCurrentChat();
+
+        if (isShortSingleGoal) {
+          setGenerating(false);
+          activeBotEl = null;
+          activeStatsEl = null;
+          return;
+        }
 
         agentStep++;
         setTimeout(() => {
           const nextScreen = (VoltAndroid.getScreenUiState) ? VoltAndroid.getScreenUiState() : '';
-          const nextPrompt = `<|im_start|>user\nЦель: ${agentGoal}\nИстория действий:\n${agentHistory.join('\n')}\n\nШаг ${agentStep}/${MAX_AGENT_STEPS}. Текущий экран UI:\n${nextScreen}<|im_end|>\n<|im_start|>assistant\n`;
+          const nextPrompt = `<|im_start|>user\nЦель: ${agentGoal}\nСделано:\n${agentHistory.join('\n')}\n\nШаг ${agentStep}/${MAX_AGENT_STEPS}. Экран:\n${nextScreen}<|im_end|>\n<|im_start|>assistant\n`;
           appendBotPlaceholder('🤖 Шаг ' + agentStep + '/' + MAX_AGENT_STEPS + '...');
-          VoltAndroid.sendPrompt(nextPrompt, AGENT_SYS_PROMPT, nextVisionImg, 0.15, cfg.topP, 512);
-        }, 1200);
+          VoltAndroid.sendPrompt(nextPrompt, AGENT_SYS_PROMPT, nextVisionImg, 0.15, cfg.topP, 384);
+        }, 1100);
         return;
       } catch (e) {}
     }
   }
 
   if (!rawStream && activeBotEl) {
-    rawStream = '*(Модель вернула пустой ответ. Проверь, что модель загружена сверху)*';
+    rawStream = '*(Нет ответа от модели. Проверь, что модель загружена сверху)*';
     activeBotEl.innerHTML = formatMd(rawStream);
   }
   if (c && rawStream) {
@@ -1142,12 +1223,12 @@ function updateServerUiState() {
   if (!badge || !btn) return;
   if (running) {
     badge.innerText = '● Запущен (:8080)';
-    badge.style.color = '#81c995';
+    badge.style.color = 'var(--ok)';
     btn.innerText = 'Остановить сервер';
   } else {
     badge.innerText = '○ Остановлен';
-    badge.style.color = '#9aa0a6';
-    btn.innerText = 'Запустить сервер :8080';
+    badge.style.color = 'var(--sub)';
+    btn.innerText = 'Запустить :8080';
   }
 }
 
@@ -1174,8 +1255,8 @@ function openMsgSheet(idx) {
   const durStr = m.totalSec ? (m.totalSec.toFixed(2) + 's') : '—';
   const tpsStr = m.tps ? (m.tps.toFixed(1) + ' ток/с') : '';
   document.getElementById('msgSheetMeta').innerHTML =
-    'Время до первого токена <b>' + ttftStr + '</b> • Генерация <b>' + durStr + '</b> ' + tpsStr +
-    '<br>Символы <b>' + raw.length + '</b> • Статус <b>complete</b>';
+    'Первый токен <b>' + ttftStr + '</b> • Генерация <b>' + durStr + '</b> ' + tpsStr +
+    '<br>Символы <b>' + raw.length + '</b>';
   document.getElementById('msgActionSheet').classList.add('open');
 }
 
@@ -1242,7 +1323,7 @@ function msgSheetAction(act) {
     <div class="act-grid">
       <div class="act-tile" onclick="msgSheetAction('copy')"><span class="ico">📋</span>Копировать</div>
       <div class="act-tile" onclick="msgSheetAction('regen')"><span class="ico">🔄</span>Повторить</div>
-      <div class="act-tile" onclick="msgSheetAction('tts')"><span class="ico">🔊</span>Читать вслух</div>
+      <div class="act-tile" onclick="msgSheetAction('tts')"><span class="ico">🔊</span>Озвучить</div>
       <div class="act-tile" onclick="msgSheetAction('share')"><span class="ico">📤</span>Делиться</div>
     </div>
     <div class="act-list">
