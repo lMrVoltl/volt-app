@@ -35,8 +35,8 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStreamReader
-import java.io.OutputStreamWriter
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.URL
@@ -55,6 +55,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     private var pendingAttachTargetId: String? = null
+    @Volatile private var isModelLoaded = false
+
+    private var localApiServer: ServerSocket? = null
+    @Volatile private var isApiServerRunning = false
+    @Volatile private var apiStreamBuffer = StringBuilder()
+    @Volatile private var apiGenerationLatch: CountDownLatch? = null
+    private var ttsEngine: TextToSpeech? = null
+    @Volatile private var promptStartTimeMs: Long = 0L
+    @Volatile private var firstTokenTimeMs: Long = 0L
 
     private val attachTargetLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -197,6 +206,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onDestroy() {
+        isApiServerRunning = false
+        try { localApiServer?.close() } catch (_: Exception) {}
+        ttsEngine?.shutdown()
+        super.onDestroy()
+    }
+
     private fun modelsDir(): File {
         val appDir = File(getExternalFilesDir(null) ?: filesDir, "VoltModels")
         if (!appDir.exists()) appDir.mkdirs()
@@ -278,19 +294,15 @@ class MainActivity : AppCompatActivity() {
         val qTrans = translitRuToEn(q).replace(Regex("[^a-z0-9]"), "")
         val apps = getLaunchableApps()
 
-        // 1. Точное совпадение по имени
         apps.firstOrNull { it.first.lowercase() == q }?.let { return it }
-        // 2. Прямое вхождение в имя или packageName
         apps.firstOrNull { it.first.lowercase().contains(q) || it.second.lowercase().contains(q) }?.let { return it }
-        // 3. Совпадение после фонетической транслитерации (без словаря)
         if (qTrans.length >= 2) {
             apps.firstOrNull { (label, pkg) ->
                 val lTrans = translitRuToEn(label).replace(Regex("[^a-z0-9]"), "")
                 val pNorm = pkg.lowercase().replace(Regex("[^a-z0-9]"), "")
-                lTrans.contains(qTrans) || qTrans.contains(lTrans) && lTrans.length >= 3 || pNorm.contains(qTrans)
+                lTrans.contains(qTrans) || (qTrans.contains(lTrans) && lTrans.length >= 3) || pNorm.contains(qTrans)
             }?.let { return it }
 
-            // 4. Нечёткий поиск (расстояние Левенштейна) на случай опечаток или фонетических расхождений (ютуб -> youtube)
             var best: Pair<String, String>? = null
             var bestScore = Double.MAX_VALUE
             for (app in apps) {
@@ -395,15 +407,245 @@ class MainActivity : AppCompatActivity() {
 
     fun onNativeToken(token: String) {
         if (firstTokenTimeMs == 0L) firstTokenTimeMs = System.currentTimeMillis()
-        if (apiGenerationLatch != null) apiStreamBuffer.append(token)
+        if (apiGenerationLatch != null) {
+            apiStreamBuffer.append(token)
+            return
+        }
         val escaped = JSONObject.quote(token)
         runOnUiThread { webView.evaluateJavascript("window.onVoltToken($escaped)", null) }
     }
 
     fun onNativeStats(tokens: Int, tps: Double, totalSec: Double, visionState: Int, visionErr: String) {
+        if (apiGenerationLatch != null) return
         runOnUiThread {
             val qErr = JSONObject.quote(visionErr)
             webView.evaluateJavascript("window.onVoltStats($tokens, $tps, $totalSec, $visionState, $qErr)", null)
+        }
+    }
+
+    private fun initVoltTts() {
+        if (ttsEngine == null) {
+            ttsEngine = TextToSpeech(this) { status ->
+                if (status == TextToSpeech.SUCCESS) {
+                    ttsEngine?.language = Locale("ru", "RU")
+                }
+            }
+        }
+    }
+
+    private fun startOrStopLocalServer(enable: Boolean, port: Int): String {
+        if (!enable) {
+            isApiServerRunning = false
+            try { localApiServer?.close() } catch (_: Exception) {}
+            localApiServer = null
+            return "STOPPED"
+        }
+        if (isApiServerRunning) return "RUNNING:http://127.0.0.1:$port/v1"
+        isApiServerRunning = true
+        thread(name = "VoltOpenAIServer") {
+            try {
+                val srv = ServerSocket()
+                srv.reuseAddress = true
+                srv.bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"), port), 16)
+                localApiServer = srv
+                while (isApiServerRunning) {
+                    val client = try { srv.accept() } catch (_: Exception) { break }
+                    thread { handleOpenAiClient(client) }
+                }
+            } catch (_: Exception) {
+                isApiServerRunning = false
+            }
+        }
+        return "RUNNING:http://127.0.0.1:$port/v1"
+    }
+
+    private fun extractMessageText(contentAny: Any?): String {
+        if (contentAny == null) return ""
+        if (contentAny is String) return contentAny
+        if (contentAny is JSONArray) {
+            val sb = StringBuilder()
+            for (i in 0 until contentAny.length()) {
+                val item = contentAny.optJSONObject(i) ?: continue
+                if (item.optString("type") == "text") {
+                    if (sb.isNotEmpty()) sb.append("\n")
+                    sb.append(item.optString("text", ""))
+                }
+            }
+            return sb.toString()
+        }
+        return contentAny.toString()
+    }
+
+    private fun writeHttpJson(socket: Socket, status: String, json: String) {
+        val bodyBytes = json.toByteArray(Charsets.UTF_8)
+        val headers = "HTTP/1.1 $status\r\n" +
+            "Content-Type: application/json; charset=utf-8\r\n" +
+            "Access-Control-Allow-Origin: *\r\n" +
+            "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n" +
+            "Access-Control-Allow-Headers: *\r\n" +
+            "Connection: close\r\n" +
+            "Content-Length: ${bodyBytes.size}\r\n\r\n"
+        val out = socket.getOutputStream()
+        out.write(headers.toByteArray(Charsets.UTF_8))
+        out.write(bodyBytes)
+        out.flush()
+    }
+
+    private fun handleOpenAiClient(socket: Socket) {
+        try {
+            socket.soTimeout = 180000
+            val reader = BufferedReader(InputStreamReader(socket.getInputStream(), Charsets.UTF_8))
+            val requestLine = reader.readLine() ?: return
+            var contentLength = 0
+            var line: String?
+            while (reader.readLine().also { line = it } != null && line!!.isNotEmpty()) {
+                if (line!!.lowercase().startsWith("content-length:")) {
+                    contentLength = line!!.substringAfter(":").trim().toIntOrNull() ?: 0
+                }
+            }
+            var body = ""
+            if (contentLength > 0) {
+                val buf = CharArray(contentLength)
+                var readTotal = 0
+                while (readTotal < contentLength) {
+                    val r = reader.read(buf, readTotal, contentLength - readTotal)
+                    if (r <= 0) break
+                    readTotal += r
+                }
+                body = String(buf, 0, readTotal)
+            }
+
+            if (requestLine.startsWith("OPTIONS ")) {
+                val headers = "HTTP/1.1 204 No Content\r\n" +
+                    "Access-Control-Allow-Origin: *\r\n" +
+                    "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n" +
+                    "Access-Control-Allow-Headers: *\r\n" +
+                    "Connection: close\r\n\r\n"
+                socket.getOutputStream().write(headers.toByteArray(Charsets.UTF_8))
+                socket.getOutputStream().flush()
+                return
+            }
+
+            val path = requestLine.split(" ").getOrNull(1)?.substringBefore("?") ?: "/"
+
+            if (requestLine.startsWith("GET ") && (path == "/" || path.endsWith("/models") || path == "/v1" || path == "/v1/")) {
+                val modelsJson = JSONObject().apply {
+                    put("object", "list")
+                    put("data", JSONArray().put(JSONObject().apply {
+                        put("id", "volt-local")
+                        put("object", "model")
+                        put("created", System.currentTimeMillis() / 1000)
+                        put("owned_by", "VOLTAGE")
+                    }))
+                }.toString()
+                writeHttpJson(socket, "200 OK", modelsJson)
+                return
+            }
+
+            if (path.contains("chat/completions") && body.isNotEmpty()) {
+                val reqObj = JSONObject(body)
+                val msgs = reqObj.optJSONArray("messages") ?: JSONArray()
+                val reqModel = reqObj.optString("model", "volt-local").ifBlank { "volt-local" }
+                val isStream = reqObj.optBoolean("stream", false)
+                val temp = reqObj.optDouble("temperature", 0.6).toFloat()
+                val topP = reqObj.optDouble("top_p", 0.9).toFloat()
+                val maxTok = reqObj.optInt("max_tokens", 512).coerceIn(32, 2048)
+
+                var sysPrompt = "Ты — локальный AI-ассистент Volt AI (VOLTAGE). Отвечай чётко и по делу."
+                val chatSb = StringBuilder()
+                for (i in 0 until msgs.length()) {
+                    val m = msgs.getJSONObject(i)
+                    val role = m.optString("role", "user")
+                    val content = extractMessageText(m.opt("content"))
+                    if (role == "system") sysPrompt = content
+                    else chatSb.append("<|im_start|>").append(role).append("\n").append(content).append("<|im_end|>\n")
+                }
+
+                val replyText = if (!isModelLoaded) {
+                    "Volt AI подключён, но нейросеть ещё не загружена в RAM. Открой Volt AI и выбери модель сверху."
+                } else {
+                    synchronized(this) {
+                        apiStreamBuffer = StringBuilder()
+                        val latch = CountDownLatch(1)
+                        apiGenerationLatch = latch
+                        promptStartTimeMs = System.currentTimeMillis()
+                        firstTokenTimeMs = 0L
+                        nativeGenerate(chatSb.toString(), sysPrompt, null, 0, 0, temp, topP, maxTok)
+                        apiGenerationLatch?.countDown()
+                        apiGenerationLatch = null
+                    }
+                    apiStreamBuffer.toString().trim().ifEmpty { "Готово." }
+                }
+
+                val nowSec = System.currentTimeMillis() / 1000
+                val compId = "chatcmpl-volt-${System.currentTimeMillis()}"
+
+                if (isStream) {
+                    val out = socket.getOutputStream()
+                    val sseHeaders = "HTTP/1.1 200 OK\r\n" +
+                        "Content-Type: text/event-stream; charset=utf-8\r\n" +
+                        "Cache-Control: no-cache\r\n" +
+                        "Access-Control-Allow-Origin: *\r\n" +
+                        "Connection: close\r\n\r\n"
+                    out.write(sseHeaders.toByteArray(Charsets.UTF_8))
+
+                    val chunk1 = JSONObject().apply {
+                        put("id", compId)
+                        put("object", "chat.completion.chunk")
+                        put("created", nowSec)
+                        put("model", reqModel)
+                        put("choices", JSONArray().put(JSONObject().apply {
+                            put("index", 0)
+                            put("delta", JSONObject().apply {
+                                put("role", "assistant")
+                                put("content", replyText)
+                            })
+                            put("finish_reason", JSONObject.NULL)
+                        }))
+                    }.toString()
+
+                    val chunk2 = JSONObject().apply {
+                        put("id", compId)
+                        put("object", "chat.completion.chunk")
+                        put("created", nowSec)
+                        put("model", reqModel)
+                        put("choices", JSONArray().put(JSONObject().apply {
+                            put("index", 0)
+                            put("delta", JSONObject())
+                            put("finish_reason", "stop")
+                        }))
+                    }.toString()
+
+                    out.write("data: $chunk1\n\ndata: $chunk2\n\ndata: [DONE]\n\n".toByteArray(Charsets.UTF_8))
+                    out.flush()
+                } else {
+                    val respStr = JSONObject().apply {
+                        put("id", compId)
+                        put("object", "chat.completion")
+                        put("created", nowSec)
+                        put("model", reqModel)
+                        put("choices", JSONArray().put(JSONObject().apply {
+                            put("index", 0)
+                            put("message", JSONObject().apply {
+                                put("role", "assistant")
+                                put("content", replyText)
+                            })
+                            put("finish_reason", "stop")
+                        }))
+                        put("usage", JSONObject().apply {
+                            put("prompt_tokens", chatSb.length / 4)
+                            put("completion_tokens", replyText.length / 4)
+                            put("total_tokens", (chatSb.length + replyText.length) / 4)
+                        })
+                    }.toString()
+                    writeHttpJson(socket, "200 OK", respStr)
+                }
+            } else {
+                writeHttpJson(socket, "404 Not Found", JSONObject().put("error", "Unsupported endpoint: $path").toString())
+            }
+        } catch (_: Exception) {
+        } finally {
+            try { socket.close() } catch (_: Exception) {}
         }
     }
 
@@ -475,6 +717,33 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) {
                 ""
             }
+        }
+
+        @JavascriptInterface
+        fun speakText(text: String) {
+            initVoltTts()
+            val clean = text.replace(Regex("[*#`>]"), "").trim()
+            ttsEngine?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "volt_tts")
+        }
+
+        @JavascriptInterface
+        fun stopSpeaking() {
+            ttsEngine?.stop()
+        }
+
+        @JavascriptInterface
+        fun getLastTtftMs(): Long {
+            return if (firstTokenTimeMs > promptStartTimeMs && promptStartTimeMs > 0L) {
+                firstTokenTimeMs - promptStartTimeMs
+            } else 0L
+        }
+
+        @JavascriptInterface
+        fun isLocalServerRunning(): Boolean = isApiServerRunning
+
+        @JavascriptInterface
+        fun toggleLocalApiServer(enable: Boolean, port: Int): String {
+            return startOrStopLocalServer(enable, if (port > 0) port else 8080)
         }
 
         @JavascriptInterface
@@ -749,6 +1018,7 @@ class MainActivity : AppCompatActivity() {
 
                 val mmPath = if (mmFile.exists() && mmFile.length() > 10_000_000) mmFile.absolutePath else ""
                 val ok = file.exists() && nativeLoadModel(file.absolutePath, mmPath, threads, nCtx)
+                isModelLoaded = ok
                 runOnUiThread { webView.evaluateJavascript("window.onModelLoaded('$id', $ok)", null) }
             }
         }
@@ -808,7 +1078,6 @@ class MainActivity : AppCompatActivity() {
                 promptStartTimeMs = System.currentTimeMillis()
                 firstTokenTimeMs = 0L
                 nativeGenerate(formattedHistory, sysPrompt, rgbBytes, w, h, temp, topP, maxTokens)
-                apiGenerationLatch?.countDown()
                 runOnUiThread { webView.evaluateJavascript("window.onVoltDone()", null) }
             }
         }
@@ -1020,173 +1289,5 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun stopGeneration() { nativeStop() }
-    }
-
-    // === VOLT LOCAL OPENAI API SERVER (127.0.0.1:8080) & TTS ===
-    private var localApiServer: ServerSocket? = null
-    @Volatile private var isApiServerRunning = false
-    @Volatile private var apiStreamBuffer = StringBuilder()
-    @Volatile private var apiGenerationLatch: CountDownLatch? = null
-    private var ttsEngine: TextToSpeech? = null
-    @Volatile private var promptStartTimeMs: Long = 0L
-    @Volatile private var firstTokenTimeMs: Long = 0L
-
-    private fun initVoltTts() {
-        if (ttsEngine == null) {
-            ttsEngine = TextToSpeech(this) { status ->
-                if (status == TextToSpeech.SUCCESS) {
-                    ttsEngine?.language = Locale("ru", "RU")
-                }
-            }
-        }
-    }
-
-    @JavascriptInterface
-    fun speakText(text: String) {
-        initVoltTts()
-        val clean = text.replace(Regex("[*#`>]"), "").trim()
-        ttsEngine?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "volt_tts")
-    }
-
-    @JavascriptInterface
-    fun stopSpeaking() {
-        ttsEngine?.stop()
-    }
-
-    @JavascriptInterface
-    fun getLastTtftMs(): Long {
-        return if (firstTokenTimeMs > promptStartTimeMs && promptStartTimeMs > 0L) {
-            firstTokenTimeMs - promptStartTimeMs
-        } else 0L
-    }
-
-    @JavascriptInterface
-    fun isLocalServerRunning(): Boolean = isApiServerRunning
-
-    @JavascriptInterface
-    fun toggleLocalApiServer(enable: Boolean, port: Int = 8080): String {
-        if (!enable) {
-            isApiServerRunning = false
-            try { localApiServer?.close() } catch (_: Exception) {}
-            localApiServer = null
-            return "STOPPED"
-        }
-        if (isApiServerRunning) return "RUNNING:http://127.0.0.1:$port/v1"
-        isApiServerRunning = true
-        thread(name = "VoltOpenAIServer") {
-            try {
-                val srv = ServerSocket(port, 16, InetAddress.getByName("127.0.0.1"))
-                localApiServer = srv
-                while (isApiServerRunning) {
-                    val client = try { srv.accept() } catch (_: Exception) { break }
-                    thread { handleOpenAiClient(client) }
-                }
-            } catch (_: Exception) {
-                isApiServerRunning = false
-            }
-        }
-        return "RUNNING:http://127.0.0.1:$port/v1"
-    }
-
-    private fun handleOpenAiClient(socket: Socket) {
-        try {
-            socket.soTimeout = 120000
-            val reader = BufferedReader(InputStreamReader(socket.getInputStream(), "UTF-8"))
-            val requestLine = reader.readLine() ?: return
-            var contentLength = 0
-            var line: String?
-            while (reader.readLine().also { line = it } != null && line!!.isNotEmpty()) {
-                if (line!!.lowercase().startsWith("content-length:")) {
-                    contentLength = line!!.substringAfter(":").trim().toIntOrNull() ?: 0
-                }
-            }
-            var body = ""
-            if (contentLength > 0) {
-                val buf = CharArray(contentLength)
-                var readTotal = 0
-                while (readTotal < contentLength) {
-                    val r = reader.read(buf, readTotal, contentLength - readTotal)
-                    if (r <= 0) break
-                    readTotal += r
-                }
-                body = String(buf, 0, readTotal)
-            }
-
-            val out = OutputStreamWriter(socket.getOutputStream(), "UTF-8")
-            val nl = "\r\n"
-            if (requestLine.startsWith("OPTIONS ")) {
-                out.write("HTTP/1.1 204 No Content${nl}Access-Control-Allow-Origin: *${nl}Access-Control-Allow-Methods: GET, POST, OPTIONS${nl}Access-Control-Allow-Headers: *${nl}${nl}")
-                out.flush()
-                return
-            }
-
-            if (requestLine.contains("/v1/models")) {
-                val modelsJson = JSONObject().apply {
-                    put("object", "list")
-                    put("data", JSONArray().put(JSONObject().apply {
-                        put("id", "volt-local")
-                        put("object", "model")
-                        put("owned_by", "VOLTAGE")
-                    }))
-                }.toString()
-                out.write("HTTP/1.1 200 OK${nl}Content-Type: application/json; charset=utf-8${nl}Access-Control-Allow-Origin: *${nl}Content-Length: ${modelsJson.toByteArray().size}${nl}${nl}$modelsJson")
-                out.flush()
-                return
-            }
-
-            if (requestLine.contains("/v1/chat/completions") && body.isNotEmpty()) {
-                val reqObj = JSONObject(body)
-                val msgs = reqObj.optJSONArray("messages") ?: JSONArray()
-                val temp = reqObj.optDouble("temperature", 0.7).toFloat()
-                val topP = reqObj.optDouble("top_p", 0.9).toFloat()
-                val maxTok = reqObj.optInt("max_tokens", 512)
-                var sysPrompt = "Ты — полезный AI-ассистент Volt AI."
-                val chatSb = StringBuilder()
-                for (i in 0 until msgs.length()) {
-                    val m = msgs.getJSONObject(i)
-                    val role = m.optString("role", "user")
-                    val content = m.optString("content", "")
-                    if (role == "system") sysPrompt = content
-                    else chatSb.append("<|im_start|>").append(role).append("\n").append(content).append("<|im_end|>\n")
-                }
-                chatSb.append("<|im_start|>assistant\n")
-
-                synchronized(this) {
-                    apiStreamBuffer = StringBuilder()
-                    val latch = CountDownLatch(1)
-                    apiGenerationLatch = latch
-                    promptStartTimeMs = System.currentTimeMillis()
-                    firstTokenTimeMs = 0L
-                    nativeGenerate(chatSb.toString(), sysPrompt, null, 0, 0, temp, topP, maxTok)
-                    apiGenerationLatch?.countDown()
-                    apiGenerationLatch = null
-                }
-
-                val replyText = apiStreamBuffer.toString().trim()
-                val respStr = JSONObject().apply {
-                    put("id", "chatcmpl-volt-${System.currentTimeMillis()}")
-                    put("object", "chat.completion")
-                    put("created", System.currentTimeMillis() / 1000)
-                    put("model", "volt-local")
-                    put("choices", JSONArray().put(JSONObject().apply {
-                        put("index", 0)
-                        put("message", JSONObject().apply {
-                            put("role", "assistant")
-                            put("content", replyText)
-                        })
-                        put("finish_reason", "stop")
-                    }))
-                }.toString()
-                out.write("HTTP/1.1 200 OK${nl}Content-Type: application/json; charset=utf-8${nl}Access-Control-Allow-Origin: *${nl}Content-Length: ${respStr.toByteArray().size}${nl}${nl}$respStr")
-                out.flush()
-            } else {
-                val err = JSONObject().put("error", "Unsupported endpoint").toString()
-                out.write("HTTP/1.1 404 Not Found${nl}Content-Type: application/json${nl}Content-Length: ${err.length}${nl}${nl}$err")
-                out.flush()
-            }
-        } catch (_: Exception) {
-        } finally {
-            try { socket.close() } catch (_: Exception) {}
-        }
     }
 }
