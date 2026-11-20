@@ -44,9 +44,6 @@ Java_com_voltage_ai_MainActivity_nativeLoadModel(
     mtmd_log_set(volt_mtmd_log_cb, nullptr);
 
     auto mparams = llama_model_default_params();
-    mparams.use_mmap = true;
-    mparams.use_mlock = false;
-
     g_model = llama_model_load_from_file(path, mparams);
     env->ReleaseStringUTFChars(jpath, path);
     if (!g_model) return JNI_FALSE;
@@ -177,13 +174,11 @@ Java_com_voltage_ai_MainActivity_nativeGenerate(
         if (n_tokens <= 0) return;
         tokens.resize(n_tokens);
 
-        // Защита от переполнения контекста
         int maxPromptTokens = std::max(128, g_active_ctx - 128);
         if ((int)tokens.size() > maxPromptTokens) {
             tokens.erase(tokens.begin(), tokens.end() - maxPromptTokens);
         }
 
-        // Чанковый prefill по 256 токенов — исключает скачки RAM и OOM-перезагрузки
         const int chunkSize = 256;
         for (int offset = 0; offset < (int)tokens.size(); offset += chunkSize) {
             if (g_stop) return;
