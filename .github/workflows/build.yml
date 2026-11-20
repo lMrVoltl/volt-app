@@ -7,7 +7,55 @@ permissions:
   contents: write
 
 jobs:
+  preflight:
+    name: Fast Checks (JS, JNI, XML)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check JS syntax in index.html
+        run: |
+          python3 - << 'PY'
+          import re, subprocess, sys
+          html = open("app/src/main/assets/index.html", encoding="utf-8").read()
+          scripts = re.findall(r"<script[^>]*>([\s\S]*?)</script>", html)
+          assert scripts, "No <script> block found in index.html"
+          open("/tmp/volt_ui.js", "w", encoding="utf-8").write("\n".join(scripts))
+          res = subprocess.run(["node", "--check", "/tmp/volt_ui.js"], capture_output=True, text=True)
+          if res.returncode != 0:
+              print("JS SYNTAX ERROR:\n", res.stderr)
+              sys.exit(1)
+          print("✅ JS syntax OK")
+          PY
+
+      - name: Check JNI signatures & XML files
+        run: |
+          python3 - << 'PY'
+          import os, xml.etree.ElementTree as ET
+
+          kt = open("app/src/main/java/com/voltage/ai/MainActivity.kt", encoding="utf-8").read()
+          cpp = open("app/src/main/cpp/volt_jni.cpp", encoding="utf-8").read()
+
+          for fn in ["nativeLoadModel", "nativeGenerate", "nativeStop"]:
+              assert f"external fun {fn}" in kt, f"Missing {fn} in MainActivity.kt"
+              assert f"MainActivity_{fn}" in cpp, f"Missing {fn} in volt_jni.cpp"
+
+          assert 'onNativeStats", "(IDDILjava/lang/String;)V"' in cpp, "onNativeStats signature mismatch in volt_jni.cpp"
+          assert "fun onNativeStats(tokens: Int, tps: Double, totalSec: Double, visionState: Int, visionErr: String)" in kt, "onNativeStats signature mismatch in MainActivity.kt"
+
+          for xml_file in [
+              "app/src/main/AndroidManifest.xml",
+              "app/src/main/res/xml/accessibility_service_config.xml"
+          ]:
+              assert os.path.exists(xml_file), f"Missing {xml_file}"
+              ET.parse(xml_file)
+
+          print("✅ JNI signatures and XML files OK")
+          PY
+
   build:
+    name: Build & Release APK
+    needs: preflight
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,10 +79,11 @@ jobs:
       - name: Build Debug APK
         run: gradle assembleDebug
 
-      - name: Publish APK to GitHub Release
+      - name: Verify APK & Publish to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk VoltAI.apk
+          unzip -tq VoltAI.apk
           gh release delete app-latest -y || true
           gh release create app-latest VoltAI.apk --title "Volt AI APK" --notes "Автосборка приложения Volt AI"
