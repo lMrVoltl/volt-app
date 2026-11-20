@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Volt AI</title>
 <style>
-  :root{--bg:#131314;--surf:#1e1f20;--surf2:#282a2c;--txt:#e3e3e3;--sub:#9aa0a6;--acc:#a8c7fa;--accTxt:#062e6f;--ok:#81c995;--warn:#f28b82}
+  :root{--bg:#131314;--surf:#1e1f20;--surf2:#282a2c;--card:#1e1f22;--bdr:#333538;--txt:#e3e3e3;--sub:#9aa0a6;--acc:#a8c7fa;--accTxt:#062e6f;--ok:#81c995;--warn:#f28b82}
   *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,system-ui,sans-serif}
   body{background:var(--bg);color:var(--txt);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
   header{height:56px;padding:0 10px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:6px}
@@ -15,22 +15,28 @@
   .welcome{margin:auto 0;padding:16px 4px}
   .welcome h1{font-size:28px;font-weight:500;background:linear-gradient(90deg,#a8c7fa,#c58af9);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
   .welcome p{color:var(--sub);margin-top:8px;font-size:15px}
-  .msg-u{align-self:flex-end;background:var(--surf2);padding:12px 16px;border-radius:22px 22px 6px 22px;max-width:85%;font-size:15px;line-height:1.45;word-break:break-word}
+  .msg-u{align-self:flex-end;background:var(--surf2);padding:12px 16px;border-radius:22px 22px 6px 22px;max-width:85%;font-size:15px;line-height:1.45;word-break:break-word;cursor:pointer}
   .msg-u img{max-width:100%;border-radius:12px;margin-bottom:8px;display:block}
   .att-tag{font-size:12px;color:var(--acc);background:rgba(168,199,250,.12);padding:4px 8px;border-radius:8px;margin-bottom:6px;display:inline-block}
-  .msg-a{display:flex;gap:10px;align-items:flex-start;font-size:15px;line-height:1.55}
+  .msg-a{display:flex;gap:10px;align-items:flex-start;font-size:15px;line-height:1.55;cursor:pointer}
   .spark{width:26px;height:26px;border-radius:13px;background:var(--surf2);display:grid;place-items:center;flex-shrink:0;color:var(--acc);margin-top:2px}
   .bot-wrap{flex:1;min-width:0}
   .bot-txt{word-break:break-word}
+  .agent-step-box{background:rgba(168,199,250,.08);border:1px solid rgba(168,199,250,.22);border-radius:12px;padding:8px 11px;margin-top:6px;font-family:monospace;font-size:12px;color:var(--acc);white-space:pre-wrap}
   .stats-bar{margin-top:8px;display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--surf);border:1px solid rgba(255,255,255,.06);padding:4px 10px;border-radius:12px;font-size:11.5px;color:var(--sub);font-variant-numeric:tabular-nums}
   .stats-bar b{color:var(--ok);font-weight:600}
   .stats-bar .v-ok{color:var(--acc);font-weight:600}
   .stats-bar .v-err{color:var(--warn);font-weight:600}
-  .bot-txt pre{background:#0d0d0e;padding:12px;border-radius:12px;overflow-x:auto;margin:8px 0;font-family:monospace;font-size:13px;position:relative}
+  .bot-txt pre{background:#0d0d0e;padding:12px;border-radius:12px;overflow-x:auto;margin:8px 0;font-family:monospace;font-size:13px;position:relative;color:#e3e3e3}
   .bot-txt code{font-family:monospace;background:var(--surf2);padding:2px 5px;border-radius:5px;font-size:13px}
   .bot-txt pre code{background:transparent;padding:0}
   .copy-btn{position:absolute;top:6px;right:6px;background:var(--surf2);color:var(--txt);border:none;border-radius:6px;padding:3px 8px;font-size:11px}
-  footer{padding:6px 12px 14px;background:var(--bg);flex-shrink:0}
+  footer{padding:4px 12px 14px;background:var(--bg);flex-shrink:0}
+  .agent-bar{display:flex;align-items:center;gap:6px;overflow-x:auto;padding:2px 2px 7px;scrollbar-width:none}
+  .agent-bar::-webkit-scrollbar{display:none}
+  .agent-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:14px;font-size:12px;font-weight:600;background:var(--surf2);color:var(--sub);border:1px solid var(--bdr);cursor:pointer;white-space:nowrap;transition:.15s}
+  .agent-pill.on{background:rgba(168,199,250,.18);color:var(--acc);border-color:var(--acc)}
+  .agent-pill.warn{background:rgba(242,139,130,.15);color:var(--warn);border-color:rgba(242,139,130,.4)}
   .preview-bar{display:none;align-items:center;gap:8px;background:var(--surf);padding:8px 12px;border-radius:16px 16px 0 0;margin-bottom:-8px;padding-bottom:14px;font-size:13px;color:var(--acc)}
   .preview-bar.show{display:flex}
   .preview-bar img{height:36px;width:36px;object-fit:cover;border-radius:8px}
@@ -51,12 +57,10 @@
   .tab-chip{background:var(--surf2);color:var(--sub);border:1px solid rgba(255,255,255,.06);padding:6px 13px;border-radius:16px;font-size:12.5px;font-weight:500;white-space:nowrap}
   .tab-chip.active{background:var(--acc);color:var(--accTxt);border-color:var(--acc);font-weight:600}
   .preset-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
-  .preset-chip{background:var(--surf);color:var(--acc);border:1px solid rgba(168,199,250,.25);padding:5px 10px;border-radius:12px;font-size:11.5px;font-weight:500}
+  .preset-chip,.preset-btn{background:var(--surf);color:var(--acc);border:1px solid rgba(168,199,250,.25);padding:5px 10px;border-radius:12px;font-size:11.5px;font-weight:500}
   .sec-title{font-size:11.5px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--acc);margin:16px 4px 6px}
   .card{background:var(--surf2);border:1px solid rgba(255,255,255,.06);border-radius:20px;padding:15px}
   .grp-sub{font-size:12px;color:var(--sub);margin-bottom:4px}
-  .badge{display:inline-block;font-size:11px;padding:3px 9px;border-radius:12px;background:rgba(129,201,149,.18);color:var(--ok);margin-bottom:6px;margin-right:4px}
-  .badge.unc{background:rgba(197,138,249,.18);color:#c58af9}
   .btn{width:100%;margin-top:12px;padding:12px;border-radius:14px;border:none;background:var(--acc);color:var(--accTxt);font-weight:600;font-size:14px}
   .btn.sec{background:var(--surf2);color:var(--txt);border:1px solid rgba(255,255,255,.08)}
   .os-hero{background:linear-gradient(135deg,#1d293e 0%,#261e38 55%,#1b232e 100%);border:1px solid rgba(168,199,250,.22);border-radius:24px;padding:18px;position:relative;overflow:hidden}
@@ -75,74 +79,70 @@
   .set-hint{font-size:11.5px;color:var(--sub);margin-top:3px}
   input[type=range]{width:100%;accent-color:var(--acc)}
   select,textarea.sys-inp{width:100%;background:var(--surf);color:var(--txt);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px 12px;font-size:14px;outline:none}
-.agent-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:14px;font-size:12px;font-weight:600;background:#282a2c;color:var(--sub);border:1px solid #3c4043;cursor:pointer;margin-bottom:6px;transition:.15s}
-.agent-pill.on{background:rgba(168,199,250,.18);color:#a8c7fa;border-color:#a8c7fa}
 
-body.light-theme {
-  --bg: #f6f4ef;
-  --surf: #ebe8e0;
-  --card: #ffffff;
-  --txt: #1c1b18;
-  --sub: #6b685f;
-  --acc: #2b59c3;
-  --bdr: #dcd8ce;
-}
-body.light-theme .msg-u { background: #e3dfd5; color: #1c1b18; }
-body.light-theme .bot-txt { color: #1c1b18; }
-body.light-theme .input-pill { background: #ebe8e0; border-color: #d5d0c5; }
-body.light-theme .stats-bar { background: #ebe8e0; color: #2b59c3; }
+  body.light-theme {
+    --bg: #f6f4ef;
+    --surf: #ebe8e0;
+    --surf2: #e3dfd5;
+    --card: #ffffff;
+    --txt: #1c1b18;
+    --sub: #6b685f;
+    --acc: #2b59c3;
+    --accTxt: #ffffff;
+    --bdr: #dcd8ce;
+  }
+  body.light-theme .msg-u { background: #e3dfd5; color: #1c1b18; }
+  body.light-theme .bot-txt { color: #1c1b18; }
+  body.light-theme .stats-bar { background: #ebe8e0; color: #2b59c3; }
 
-.msg-act-sheet {
-  position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 9999;
-  display: none; align-items: flex-end; justify-content: center;
-}
-.msg-act-sheet.open { display: flex; }
-.msg-act-box {
-  width: 100%; max-width: 520px; background: var(--card, #1e1f22); color: var(--txt, #e3e3e3);
-  border-radius: 22px 22px 0 0; padding: 12px 16px 22px; box-shadow: 0 -8px 32px rgba(0,0,0,.45);
-  animation: slideUp .18s ease-out;
-}
-@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-.sheet-grab { width: 38px; height: 4px; background: #666; border-radius: 4px; margin: 0 auto 14px; }
-.act-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
-.act-tile {
-  background: var(--surf, #282a2c); border: 1px solid var(--bdr, #3c4043); border-radius: 14px;
-  padding: 10px 4px; text-align: center; font-size: 11.5px; font-weight: 600; cursor: pointer;
-  display: flex; flex-direction: column; align-items: center; gap: 5px;
-}
-.act-tile span.ico { font-size: 18px; }
-.act-list {
-  background: var(--surf, #282a2c); border: 1px solid var(--bdr, #3c4043); border-radius: 14px;
-  overflow: hidden; margin-bottom: 12px;
-}
-.act-item {
-  padding: 12px 14px; font-size: 13.5px; display: flex; align-items: center; gap: 10px;
-  border-bottom: 1px solid var(--bdr, #333538); cursor: pointer;
-}
-.act-item:last-child { border-bottom: none; }
-.act-item.danger { color: #f28b82; }
-.act-meta { font-size: 11.5px; color: var(--sub, #9aa0a6); text-align: center; line-height: 1.55; }
-.msg-u, .msg-a { cursor: pointer; }
+  .msg-act-sheet {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 9999;
+    display: none; align-items: flex-end; justify-content: center;
+  }
+  .msg-act-sheet.open { display: flex; }
+  .msg-act-box {
+    width: 100%; max-width: 520px; background: var(--card); color: var(--txt);
+    border-radius: 22px 22px 0 0; padding: 12px 16px 22px; box-shadow: 0 -8px 32px rgba(0,0,0,.45);
+    animation: slideUp .18s ease-out;
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .sheet-grab { width: 38px; height: 4px; background: #666; border-radius: 4px; margin: 0 auto 14px; }
+  .act-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+  .act-tile {
+    background: var(--surf); border: 1px solid var(--bdr); border-radius: 14px;
+    padding: 10px 4px; text-align: center; font-size: 11.5px; font-weight: 600; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+  }
+  .act-tile span.ico { font-size: 18px; }
+  .act-list {
+    background: var(--surf); border: 1px solid var(--bdr); border-radius: 14px;
+    overflow: hidden; margin-bottom: 12px;
+  }
+  .act-item {
+    padding: 12px 14px; font-size: 13.5px; display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid var(--bdr); cursor: pointer;
+  }
+  .act-item:last-child { border-bottom: none; }
+  .act-item.danger { color: #f28b82; }
+  .act-meta { font-size: 11.5px; color: var(--sub); text-align: center; line-height: 1.55; }
 
-
-.fam-card { background: var(--card,#1e1f22); border: 1px solid var(--bdr,#333538); border-radius: 16px; padding: 14px; margin-top: 12px; }
-.fam-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-.fam-title { font-size: 15.5px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.fam-arrow {
-  background: var(--surf,#282a2c); border: 1px solid var(--bdr,#3c4043); color: var(--txt,#e3e3e3);
-  border-radius: 10px; padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
-}
-.fam-desc { font-size: 12.5px; color: var(--sub,#9aa0a6); margin-top: 5px; line-height: 1.4; }
-.ver-drawer { display: none; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--bdr,#333538); }
-.ver-drawer.open { display: block; }
-.ver-item { background: var(--surf,#282a2c); border-radius: 12px; padding: 10px 12px; margin-top: 8px; border: 1px solid var(--bdr,#3c4043); }
-.prog-wrap { width: 100%; height: 8px; background: #141517; border-radius: 99px; overflow: hidden; margin-top: 6px; }
-.prog-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #4285f4, #a8c7fa); transition: width .2s ease; }
-.btn-del {
-  background: rgba(242,139,130,.15); color: #f28b82; border: 1px solid rgba(242,139,130,.35);
-  border-radius: 10px; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
-}
-
+  .fam-card { background: var(--card); border: 1px solid var(--bdr); border-radius: 16px; padding: 14px; margin-top: 12px; }
+  .fam-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .fam-title { font-size: 15.5px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .fam-arrow {
+    background: var(--surf); border: 1px solid var(--bdr); color: var(--txt);
+    border-radius: 10px; padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .fam-desc { font-size: 12.5px; color: var(--sub); margin-top: 5px; line-height: 1.4; }
+  .ver-drawer { display: none; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--bdr); }
+  .ver-drawer.open { display: block; }
+  .ver-item { background: var(--surf); border-radius: 12px; padding: 10px 12px; margin-top: 8px; border: 1px solid var(--bdr); }
+  .prog-wrap { width: 100%; height: 8px; background: #141517; border-radius: 99px; overflow: hidden; margin-top: 6px; }
+  .prog-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #4285f4, #a8c7fa); transition: width .2s ease; }
+  .btn-del {
+    background: rgba(242,139,130,.15); color: #f28b82; border: 1px solid rgba(242,139,130,.35);
+    border-radius: 10px; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -167,6 +167,11 @@ body.light-theme .stats-bar { background: #ebe8e0; color: #2b59c3; }
 <main id="chat"></main>
 
 <footer>
+  <div class="agent-bar">
+    <button type="button" class="agent-pill" id="agentToggleBtn" onclick="toggleAgentMode()">🤖 Агент: ВЫКЛ</button>
+    <button type="button" class="agent-pill warn" id="agentPermHint" style="display:none" onclick="VoltAndroid.openAccessibilitySettings()">⚠️ Включить доступ к экрану</button>
+    <button type="button" class="agent-pill" id="wsBadge" style="display:none" onclick="alert('Рабочая папка агента для кода и файлов:\n/sdcard/Download/VoltWorkspace')">📁 VoltWorkspace</button>
+  </div>
   <div class="preview-bar" id="previewBar">
     <img id="prevImg" style="display:none">
     <span id="prevLabel" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
@@ -199,7 +204,7 @@ body.light-theme .stats-bar { background: #ebe8e0; color: #2b59c3; }
       <h3>Модели VOLTAGE</h3>
       <span id="ramChip" style="font-size:12px;color:var(--sub)"></span>
     </div>
-    <div id="modelsList" style="margin-top:8px;color:var(--sub);font-size:14px">Загрузка каталога с GitHub...</div>
+    <div id="modelsList" style="margin-top:8px;color:var(--sub);font-size:14px">Загрузка каталога...</div>
     <button class="btn sec" style="margin-top:14px" onclick="importLocalModel()">+ Добавить свою модель (.gguf)</button>
     <div id="importStatus" style="font-size:12px;color:var(--acc);margin-top:6px;text-align:center"></div>
   </div>
@@ -289,8 +294,8 @@ body.light-theme .stats-bar { background: #ebe8e0; color: #2b59c3; }
         <div class="set-row">
           <div class="set-head"><span>Локальный OpenAI API-сервер (Telegram)</span><b id="srvStatusBadge" style="color:#9aa0a6">○ Остановлен</b></div>
           <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
-            <button type="button" id="srvToggleBtn" onclick="toggleLocalServerUi()" style="flex:1;padding:9px 12px;border-radius:10px;border:none;background:var(--acc,#a8c7fa);color:#062e6f;font-weight:700;cursor:pointer">Запустить сервер :8080</button>
-            <button type="button" onclick="copyServerUrl()" style="padding:9px 12px;border-radius:10px;border:1px solid #3c4043;background:var(--surf,#282a2c);color:var(--txt,#e3e3e3);font-size:12px;cursor:pointer">📋 URL</button>
+            <button type="button" id="srvToggleBtn" onclick="toggleLocalServerUi()" style="flex:1;padding:9px 12px;border-radius:10px;border:none;background:var(--acc);color:var(--accTxt);font-weight:700;cursor:pointer">Запустить сервер :8080</button>
+            <button type="button" onclick="copyServerUrl()" style="padding:9px 12px;border-radius:10px;border:1px solid var(--bdr);background:var(--surf);color:var(--txt);font-size:12px;cursor:pointer">📋 URL</button>
           </div>
           <div class="set-hint">Endpoint для ботов и плагинов Telegram: <code>http://127.0.0.1:8080/v1</code></div>
         </div>
@@ -323,41 +328,72 @@ let agentMode = false;
 let agentGoal = '';
 let agentStep = 0;
 let agentHistory = [];
-const MAX_AGENT_STEPS = 7;
+let pendingAgentVisionUrl = '';
+const MAX_AGENT_STEPS = 8;
 
-const AGENT_SYS_PROMPT = `Ты — автономный экранный AI-агент для Android. Ты видишь список элементов текущего экрана с индексами [0], [1]... и координатами [x,y].
-Чтобы выполнить следующий шаг к цели пользователя, ответь ТОЛЬКО одним валидным JSON без лишнего текста:
-{"action":"КОМАНДА","target":"ПАРАМЕТР","value":"ДОП"}
-Команды:
-- open_app (target: имя приложения, если нужное приложение ещё не открыто)
-- click_id (target: номер элемента из списка, например "3")
+const AGENT_SYS_PROMPT = `Ты — автономный AI-агент Volt (как Claude Code + управление смартфоном Android).
+Ты умеешь:
+1. Видеть UI-дерево экрана (элементы с id, text, xy) и при необходимости делать скриншот экрана.
+2. Управлять телефоном: открывать приложения, нажимать кнопки, вводить текст, листать, ставить будильники, включать фонарик.
+3. Создавать проекты, писать/читать/редактировать код и файлы в папке /sdcard/Download/VoltWorkspace, а также выполнять shell-команды.
+
+Отвечай СТРОГО одним JSON-объектом без лишнего текста до или после:
+{"action":"КОМАНДА","target":"ПАРАМЕТР","value":"ДОП_ДАННЫЕ"}
+
+Доступные команды:
+- open_app (target: имя приложения, например "YouTube", "Настройки", "Telegram")
+- click_id (target: номер id элемента из списка экрана, например "3")
 - click (target: точный текст кнопки на экране)
 - tap_xy (target: "x,y" из координат элемента)
-- input_text (target: "текст для ввода", value: "номер_элемента_поля_или_пусто")
-- scroll (target: "down")
-- back (target: "")
-- home (target: "")
-- set_alarm (target: "ЧЧ:ММ", value: "название")
+- input_text (target: "текст для ввода", value: "id_поля_или_пусто")
+- scroll (target: "down") / scroll_up (target: "up")
+- back (target: "") / home (target: "")
+- look_screen (target: "что проверить на скриншоте" — делает снимок экрана для Vision-анализа)
+- set_alarm (target: "ЧЧ:ММ", value: "название") / set_timer (target: "секунды")
 - flashlight (target: "on" или "off")
-- done (target: "краткий отчёт, что задача выполнена")
-Если цель уже достигнута на текущем экране — обязательно верни {"action":"done","target":"..."}.`;
+- search_web (target: "поисковый запрос")
+- list_files (target: "." или относительный путь в VoltWorkspace)
+- read_file (target: "путь/к/файлу")
+- write_file (target: "путь/к/файлу", value: "полный код или текст файла")
+- append_file (target: "путь/к/файлу", value: "добавляемый текст")
+- delete_file (target: "путь/к/файлу")
+- run_shell (target: "команда sh, например python3 app.py или ls -la")
+- done (target: "подробный отчёт пользователю о выполненной работе")
+
+Правила:
+- Если пользователь просит написать код/скрипт/сайт/заметку — создай файл через write_file и при необходимости проверь через run_shell, затем вызови done.
+- Если нужно действие в телефоне — выполняй по одному шагу за раз, проверяя обновлённый экран.
+- Когда цель выполнена — обязательно верни {"action":"done","target":"..."}.`;
+
+function refreshAgentBar() {
+  const btn = document.getElementById('agentToggleBtn');
+  const hint = document.getElementById('agentPermHint');
+  const ws = document.getElementById('wsBadge');
+  const inp = document.getElementById('inp');
+  if (agentMode) {
+    btn.classList.add('on');
+    btn.innerText = '🤖 Агент: ВКЛ';
+    ws.style.display = 'inline-flex';
+    inp.placeholder = 'Задача агенту (код, файлы или управление экраном)...';
+    const hasAcc = (window.VoltAndroid && VoltAndroid.isAgentAccessibilityEnabled) ? VoltAndroid.isAgentAccessibilityEnabled() : false;
+    hint.style.display = hasAcc ? 'none' : 'inline-flex';
+  } else {
+    btn.classList.remove('on');
+    btn.innerText = '🤖 Агент: ВЫКЛ';
+    ws.style.display = 'none';
+    hint.style.display = 'none';
+    inp.placeholder = 'Спросите Volt...';
+  }
+}
 
 function toggleAgentMode() {
   agentMode = !agentMode;
-  const btn = document.getElementById('agentToggleBtn');
-  const hint = document.getElementById('agentPermHint');
-  if (agentMode) {
-    btn.classList.add('on');
-    btn.innerText = '🤖 Режим агента: ВКЛ';
-    if (window.VoltAndroid && VoltAndroid.isAgentAccessibilityEnabled && !VoltAndroid.isAgentAccessibilityEnabled()) {
-      hint.style.display = 'inline';
-    }
-  } else {
-    btn.classList.remove('on');
-    btn.innerText = '🤖 Режим агента: ВЫКЛ';
-    hint.style.display = 'none';
-  }
+  refreshAgentBar();
 }
+
+window.addEventListener('focus', () => {
+  if (agentMode) refreshAgentBar();
+});
 
 const DEFAULT_CFG = {
   temp: 0.6, topP: 0.9, maxTokens: 1024, threads: 4, ctx: 4096, showStats: true,
@@ -374,12 +410,12 @@ let currentChatId = null, pendingAttachment = null;
 function applyPreset(kind) {
   const sysEl = document.getElementById('setSys');
   const tempEl = document.getElementById('setTemp');
-  if (kind === 'std') {
+  if (kind === 'turbo') {
+    sysEl.value = 'Отвечай кратко и по делу на русском языке.';
+    tempEl.value = 0.4;
+  } else if (kind === 'std') {
     sysEl.value = DEFAULT_CFG.sysPrompt;
     tempEl.value = 0.6;
-  } else if (kind === 'rp') {
-    sysEl.value = 'Ты мастер ролевых игр и живой собеседник на русском языке. Полностью входи в заданную роль, описывай действия, атмосферу и диалоги естественно, без цензурных оговорок и морализаторства.';
-    tempEl.value = 0.85;
   } else if (kind === 'free') {
     sysEl.value = 'Общайся свободно, прямо и по-дружески на русском языке, без лишних формальностей, отказов и нравоучений.';
     tempEl.value = 0.8;
@@ -408,9 +444,9 @@ function saveChats() {
     const slim = chats.slice(0, 20).map(c => ({
       id: c.id,
       title: c.title,
-      messages: c.messages.slice(-30).map(m => {
+      messages: c.messages.slice(-24).map(m => {
         const copy = Object.assign({}, m);
-        delete copy.img;
+        if (copy.img && copy.img.length > 60000) delete copy.img;
         return copy;
       })
     }));
@@ -424,6 +460,7 @@ function openDrawer(){ renderChatList(); document.getElementById('drawerBg').cla
 function closeDrawer(){ document.getElementById('drawerBg').classList.remove('open'); }
 function openSheet(id){ document.getElementById(id).classList.add('open'); }
 function closeSheets(){ document.querySelectorAll('.sheet-bg').forEach(e=>e.classList.remove('open')); }
+
 function filterSettings(grp, btn) {
   document.querySelectorAll('.tab-chip').forEach(el => el.classList.remove('active'));
   if (btn) btn.classList.add('active');
@@ -444,6 +481,9 @@ function fillSettingsUi() {
   document.getElementById('setCtx').value = String(cfg.ctx);
   document.getElementById('setStats').checked = cfg.showStats;
   document.getElementById('setSys').value = cfg.sysPrompt;
+  const lt = document.getElementById('setLightTheme');
+  if (lt) lt.checked = !!cfg.lightTheme;
+  updateServerUiState();
 }
 
 function openSettings() {
@@ -490,7 +530,7 @@ function saveSettings() {
 function formatMd(txt) {
   let esc = txt.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   esc = esc.replace(/```([\s\S]*?)```/g, (_, code) =>
-    '<pre><button class="copy-btn" onclick="navigator.clipboard.writeText(this.parentElement.innerText.replace(\'Копировать\',\'\').trim())">Копировать</button><code>' + code.trim() + '</code></pre>'
+    '<pre><button class="copy-btn" onclick="event.stopPropagation();navigator.clipboard.writeText(this.parentElement.innerText.replace(\'Копировать\',\'\').trim())">Копировать</button><code>' + code.trim() + '</code></pre>'
   );
   esc = esc.replace(/`([^`]+)`/g, '<code>$1</code>');
   esc = esc.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
@@ -534,6 +574,22 @@ function renderChatList() {
   });
 }
 
+function appendBotPlaceholder(statusHint) {
+  const chatEl = document.getElementById('chat');
+  const a = document.createElement('div');
+  a.className = 'msg-a';
+  a.innerHTML = '<div class="spark">✦</div><div class="bot-wrap"><div class="bot-txt"></div>' +
+    (cfg.showStats ? '<div class="stats-bar">' + (statusHint || 'Подготовка контекста...') + '</div>' : '') + '</div>';
+  chatEl.appendChild(a);
+  activeBotEl = a.querySelector('.bot-txt');
+  activeStatsEl = a.querySelector('.stats-bar');
+  rawStream = '';
+  approxTokens = 0;
+  genStartTs = 0;
+  lastStatsStr = '';
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
 function renderCurrentChat() {
   const box = document.getElementById('chat');
   const c = chats.find(x => x.id === currentChatId);
@@ -564,7 +620,8 @@ function renderCurrentChat() {
       a.className = 'msg-a';
       a.onclick = () => openMsgSheet(idx);
       const statsHtml = (cfg.showStats && m.stats) ? '<div class="stats-bar">' + m.stats + '</div>' : '';
-      a.innerHTML = '<div class="spark">✦</div><div class="bot-wrap"><div class="bot-txt">' + formatMd(m.text) + '</div>' + statsHtml + '</div>';
+      const stepHtml = m.agentLog ? '<div class="agent-step-box">' + m.agentLog.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>' : '';
+      a.innerHTML = '<div class="spark">✦</div><div class="bot-wrap"><div class="bot-txt">' + formatMd(m.text) + '</div>' + stepHtml + statsHtml + '</div>';
       box.appendChild(a);
     }
   });
@@ -583,10 +640,23 @@ function handleFile(inp) {
     reader.onload = () => {
       imgEl.src = reader.result;
       imgEl.style.display = 'block';
+      const thumbImg = new Image();
+      thumbImg.onload = () => {
+        const cv = document.createElement('canvas');
+        const sc = Math.min(280 / thumbImg.width, 280 / thumbImg.height, 1);
+        cv.width = Math.round(thumbImg.width * sc);
+        cv.height = Math.round(thumbImg.height * sc);
+        cv.getContext('2d').drawImage(thumbImg, 0, 0, cv.width, cv.height);
+        if (pendingAttachment && pendingAttachment.type === 'image') {
+          pendingAttachment.thumbUrl = cv.toDataURL('image/jpeg', 0.65);
+        }
+      };
+      thumbImg.src = reader.result;
+
       const am = models.find(x => x.id === activeId);
       lbl.innerText = (am && am.vision)
         ? '👁 Фото готово для ' + am.name
-        : '⚠️ Для анализа фото выбери Volt Photon v2.0 или Volt Plasma v2.5';
+        : '⚠️ Для анализа фото выбери модель с Vision (Neutron v2.6 / Plasma v2.5)';
       bar.classList.add('show');
       pendingAttachment = { type: 'image', name: file.name, dataUrl: reader.result, extracted: '' };
       if (window.VoltAndroid && VoltAndroid.recognizeImageOcr) {
@@ -633,8 +703,10 @@ window.onload = () => {
 window.onCatalogLoaded = (raw) => {
   models = JSON.parse(raw).models;
   renderModels();
-  const ready = [...models].reverse().find(m => m.downloaded && freeRamMb >= m.min_free_ram_mb) || models.find(m => m.downloaded);
-  if (ready) activateModel(ready.id);
+  if (!activeId) {
+    const ready = [...models].reverse().find(m => m.downloaded && freeRamMb >= m.min_free_ram_mb) || models.find(m => m.downloaded);
+    if (ready) activateModel(ready.id);
+  }
 };
 window.onCatalogError = (err) => {
   document.getElementById('modelsList').innerHTML = '<div>Ошибка: ' + err + '</div><button class="btn" onclick="VoltAndroid.fetchCatalog()">Повторить</button>';
@@ -657,8 +729,8 @@ function deleteModelUi(id, name) {
     }
     if (activeId === id) {
       activeId = '';
-      const lbl = document.getElementById('activeModelName');
-      if (lbl) lbl.innerText = 'Выбери модель';
+      const lbl = document.getElementById('curModelName');
+      if (lbl) lbl.innerText = 'Выбрать модель';
     }
     renderModels();
   }
@@ -760,7 +832,6 @@ function renderModels() {
   });
 }
 
-
 function downloadViaBrowser(id, url, mmUrl) {
   if (window.VoltAndroid && VoltAndroid.openExternalUrl) {
     VoltAndroid.openExternalUrl(url);
@@ -771,7 +842,7 @@ function downloadViaBrowser(id, url, mmUrl) {
         }
       }, 800);
     }
-    alert('Загрузка открыта в браузере!\nКогда файл скачается в папку Загрузки (Download), просто перезапустите Volt AI или нажмите кнопку «📂 Файл» в карточке модели.');
+    alert('Загрузка открыта в браузере!\nКогда файл скачается в папку Загрузки (Download), перезапустите Volt AI или нажмите «📂 Файл».');
   }
 }
 
@@ -889,7 +960,11 @@ function setGenerating(state) {
 
 function send() {
   try {
-    if (generating) { VoltAndroid.stopGeneration(); return; }
+    if (generating) {
+      agentStep = MAX_AGENT_STEPS + 1;
+      VoltAndroid.stopGeneration();
+      return;
+    }
     const inp = document.getElementById('inp');
     const txt = inp.value.trim();
     if (!txt && !pendingAttachment) return;
@@ -909,58 +984,45 @@ function send() {
         userMsg.fileName = pendingAttachment.name;
         llmText = (txt || 'Разбери содержимое файла:') + '\n\n[Файл: ' + pendingAttachment.name + ']\n' + pendingAttachment.content;
       } else if (pendingAttachment.type === 'image') {
-        userMsg.img = pendingAttachment.dataUrl;
+        userMsg.img = pendingAttachment.thumbUrl || pendingAttachment.dataUrl;
         userMsg.hadImg = true;
         if (isVisionModel) {
           visionDataUrl = pendingAttachment.dataUrl;
           llmText = (txt ? txt + '. ' : '') + 'Опиши словами на русском языке, что изображено на этой фотографии (без координат).';
         } else {
-          llmText = (txt || 'Что на фото?') + (pendingAttachment.extracted ? '\n\n[Текст с фото]:\n' + pendingAttachment.extracted : '\n\n[Внимание: включена текстовая модель ' + activeModelObj.name + ' без Vision. Подскажи пользователю переключиться на Volt Photon v2.0 или Volt Plasma v2.5 в меню сверху.]');
+          llmText = (txt || 'Что на фото?') + (pendingAttachment.extracted ? '\n\n[Текст с фото]:\n' + pendingAttachment.extracted : '\n\n[Внимание: включена текстовая модель ' + activeModelObj.name + ' без Vision. Подскажи пользователю переключиться на модель с Vision в меню сверху.]');
         }
       }
       clearAttachment();
     }
     userMsg.llmText = llmText;
 
-    if (!c.messages.length) c.title = (txt || userMsg.fileName || 'Фото').slice(0, 32);
+    if (!c.messages.length) c.title = (agentMode ? '🤖 ' : '') + (txt || userMsg.fileName || 'Фото').slice(0, 30);
     c.messages.push(userMsg);
     saveChats();
     renderCurrentChat();
 
-    const chatEl = document.getElementById('chat');
-    const a = document.createElement('div');
-    a.className = 'msg-a';
-    a.innerHTML = '<div class="spark">✦</div><div class="bot-wrap"><div class="bot-txt"></div>' +
-      (cfg.showStats ? '<div class="stats-bar">' + (visionDataUrl ? '👁 Обработка фото...' : 'Подготовка контекста...') + '</div>' : '') + '</div>';
-    chatEl.appendChild(a);
-    activeBotEl = a.querySelector('.bot-txt');
-    activeStatsEl = a.querySelector('.stats-bar');
-    rawStream = '';
-    approxTokens = 0;
-    genStartTs = 0;
-    lastStatsStr = '';
+    appendBotPlaceholder(agentMode ? '🤖 Агент анализирует экран и задачу...' : (visionDataUrl ? '👁 Обработка фото...' : 'Подготовка контекста...'));
 
     inp.value = '';
     inp.style.height = 'auto';
     setGenerating(true);
-    chatEl.scrollTop = chatEl.scrollHeight;
 
-    const recent = c.messages.slice(-16).map(m =>
-      m.role === 'user'
-        ? '<|im_start|>user\n' + m.llmText + '<|im_end|>\n'
-        : '<|im_start|>assistant\n' + m.text + '<|im_end|>\n'
-    ).join('');
-    const fullSysPrompt = buildSystemPrompt(activeModelObj);
     if (agentMode) {
-      const chatObj = chats.find(x => x.id === currentChatId);
-      const lastUserMsg = chatObj ? chatObj.messages.slice().reverse().find(m => m.role === 'user') : null;
-      agentGoal = lastUserMsg ? lastUserMsg.text : '';
+      agentGoal = llmText;
       agentStep = 1;
       agentHistory = [];
+      pendingAgentVisionUrl = '';
       const screenInfo = (VoltAndroid.getScreenUiState) ? VoltAndroid.getScreenUiState() : '';
-      const agentPrompt = `<|im_start|>user\nЦель: ${agentGoal}\nШаг ${agentStep}/${MAX_AGENT_STEPS}.\n${screenInfo}<|im_end|>\n<|im_start|>assistant\n`;
-      VoltAndroid.sendPrompt(agentPrompt, AGENT_SYS_PROMPT, '', 0.1, cfg.topP, 96);
+      const agentPrompt = `<|im_start|>user\nЦель: ${agentGoal}\nШаг ${agentStep}/${MAX_AGENT_STEPS}.\nТекущий экран UI:\n${screenInfo}<|im_end|>\n<|im_start|>assistant\n`;
+      VoltAndroid.sendPrompt(agentPrompt, AGENT_SYS_PROMPT, visionDataUrl, 0.15, cfg.topP, 512);
     } else {
+      const recent = c.messages.slice(-16).map(m =>
+        m.role === 'user'
+          ? '<|im_start|>user\n' + m.llmText + '<|im_end|>\n'
+          : '<|im_start|>assistant\n' + m.text + '<|im_end|>\n'
+      ).join('');
+      const fullSysPrompt = buildSystemPrompt(activeModelObj);
       VoltAndroid.sendPrompt(recent, fullSysPrompt, visionDataUrl, cfg.temp, cfg.topP, cfg.maxTokens);
     }
   } catch (err) {
@@ -1004,38 +1066,54 @@ window.onVoltStats = (tokens, tps, totalSec, visionState, visionErr) => {
 
 window.onVoltDone = () => {
   const c = chats.find(x => x.id === currentChatId);
-  if (agentMode && c && rawStream) {
-    const match = rawStream.match(/\{[\s\S]*"action"[\s\S]*\}/);
+  if (agentMode && c && rawStream && agentStep <= MAX_AGENT_STEPS) {
+    const match = rawStream.match(/\{[\s\S]*"(?:action|cmd)"[\s\S]*\}/);
     if (match) {
       try {
         const cmd = JSON.parse(match[0]);
-        if (cmd.action === 'done' || agentStep >= MAX_AGENT_STEPS) {
-          const finalMsg = rawStream + '\n\n✅ Агент завершил: ' + (cmd.target || 'Задача выполнена');
-          if (activeBotEl) activeBotEl.innerText = finalMsg;
-          c.messages.push({ role: 'assistant', text: finalMsg, stats: lastStatsStr });
+        const actName = (cmd.action || cmd.cmd || '').toLowerCase();
+        if (actName === 'done' || agentStep >= MAX_AGENT_STEPS) {
+          const finalTxt = cmd.target || rawStream;
+          if (activeBotEl) activeBotEl.innerHTML = formatMd(finalTxt);
+          c.messages.push({ role: 'assistant', text: finalTxt, agentLog: '✅ Агент завершил задачу (шагов: ' + agentStep + ')', stats: lastStatsStr });
           saveChats();
+          renderCurrentChat();
           setGenerating(false);
           activeBotEl = null;
           activeStatsEl = null;
           return;
         }
-        const execRes = VoltAndroid.executeAgentAction(match[0]);
-        agentHistory.push(`Шаг ${agentStep}: ${cmd.action}(${cmd.target}) -> ${execRes}`);
-        const stepLog = `⚡ [Шаг ${agentStep}] ${execRes}`;
-        if (activeBotEl) activeBotEl.innerText = rawStream + '\n' + stepLog;
-        c.messages.push({ role: 'assistant', text: rawStream + '\n' + stepLog, stats: lastStatsStr });
+
+        let execRes = '';
+        let nextVisionImg = '';
+        if (actName === 'look_screen') {
+          nextVisionImg = (VoltAndroid.captureScreenForAgent) ? VoltAndroid.captureScreenForAgent() : '';
+          execRes = nextVisionImg ? 'Снимок экрана передан в Vision-модель' : 'Не удалось сделать снимок (проверь Android 11+ и Accessibility)';
+        } else {
+          execRes = VoltAndroid.executeAgentAction(match[0]);
+        }
+
+        const logLine = `⚡ Шаг ${agentStep} [${actName}]: ${execRes}`;
+        agentHistory.push(logLine);
+        c.messages.push({ role: 'assistant', text: 'Выполняю действие: `' + actName + '`', agentLog: logLine, stats: lastStatsStr });
         saveChats();
+        renderCurrentChat();
+
         agentStep++;
         setTimeout(() => {
           const nextScreen = (VoltAndroid.getScreenUiState) ? VoltAndroid.getScreenUiState() : '';
-          const nextPrompt = `<|im_start|>user\nЦель: ${agentGoal}\nВыполненные шаги:\n${agentHistory.join('\n')}\n\nШаг ${agentStep}/${MAX_AGENT_STEPS}. Текущий экран:\n${nextScreen}<|im_end|>\n<|im_start|>assistant\n`;
-          rawStream = '';
-          if (typeof appendBotPlaceholder === 'function') appendBotPlaceholder();
-          VoltAndroid.sendPrompt(nextPrompt, AGENT_SYS_PROMPT, '', 0.1, cfg.topP, 96);
-        }, 1300);
+          const nextPrompt = `<|im_start|>user\nЦель: ${agentGoal}\nИстория действий:\n${agentHistory.join('\n')}\n\nШаг ${agentStep}/${MAX_AGENT_STEPS}. Текущий экран UI:\n${nextScreen}<|im_end|>\n<|im_start|>assistant\n`;
+          appendBotPlaceholder('🤖 Шаг ' + agentStep + '/' + MAX_AGENT_STEPS + '...');
+          VoltAndroid.sendPrompt(nextPrompt, AGENT_SYS_PROMPT, nextVisionImg, 0.15, cfg.topP, 512);
+        }, 1200);
         return;
       } catch (e) {}
     }
+  }
+
+  if (!rawStream && activeBotEl) {
+    rawStream = '*(Модель вернула пустой ответ. Проверь, что модель загружена сверху)*';
+    activeBotEl.innerHTML = formatMd(rawStream);
   }
   if (c && rawStream) {
     c.messages.push({ role: 'assistant', text: rawStream, stats: lastStatsStr });
@@ -1055,8 +1133,6 @@ function toggleThemeMode(isLight) {
 }
 if (cfg.lightTheme) {
   document.body.classList.add('light-theme');
-  const cb = document.getElementById('setLightTheme');
-  if (cb) cb.checked = true;
 }
 
 function updateServerUiState() {
@@ -1087,18 +1163,6 @@ function copyServerUrl() {
   if (navigator.clipboard) navigator.clipboard.writeText(url);
   alert('Скопировано: ' + url + '\nКлюч API: volt-local');
 }
-
-const origApplyPreset = applyPreset;
-applyPreset = function(kind) {
-  if (kind === 'turbo') {
-    const sp = document.getElementById('setSysPrompt');
-    if (sp) sp.value = 'Отвечай кратко и по делу на русском языке.';
-    cfg.sysPrompt = 'Отвечай кратко и по делу на русском языке.';
-    localStorage.setItem('volt_cfg', JSON.stringify(cfg));
-    return;
-  }
-  origApplyPreset(kind);
-};
 
 function openMsgSheet(idx) {
   const c = chats.find(x => x.id === currentChatId);
@@ -1148,7 +1212,7 @@ function msgSheetAction(act) {
       if (m.role === 'user') {
         c.messages = c.messages.slice(0, selectedMsgIdx);
         saveChats(); renderCurrentChat();
-        const inp = document.getElementById('prompt');
+        const inp = document.getElementById('inp');
         if (inp) { inp.value = edited.trim(); send(); }
       } else {
         m.text = edited.trim();
@@ -1162,15 +1226,14 @@ function msgSheetAction(act) {
       const promptTxt = c.messages[userIdx].displayText || '';
       c.messages = c.messages.slice(0, userIdx);
       saveChats(); renderCurrentChat();
-      const inp = document.getElementById('prompt');
+      const inp = document.getElementById('inp');
       if (inp) { inp.value = promptTxt; send(); }
     }
   } else if (act === 'continue') {
-    const inp = document.getElementById('prompt');
+    const inp = document.getElementById('inp');
     if (inp) { inp.value = 'Продолжи свой предыдущий ответ с того места, где остановился.'; send(); }
   }
 }
-
 </script>
 
 <div class="msg-act-sheet" id="msgActionSheet" onclick="if(event.target===this)closeMsgSheet()">

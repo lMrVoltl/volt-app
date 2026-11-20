@@ -4,16 +4,17 @@ import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.hardware.camera2.CameraManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import android.content.pm.PackageManager
-import android.hardware.camera2.CameraManager
 import android.provider.AlarmClock
 import android.provider.Settings
+import android.speech.tts.TextToSpeech
 import android.util.Base64
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
@@ -30,20 +31,18 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.BufferedReader
 import java.io.File
 import java.io.FileOutputStream
-import android.speech.tts.TextToSpeech
-import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
-import java.util.Locale
-import java.util.concurrent.CountDownLatch
-
 import java.net.URL
 import java.net.UnknownHostException
+import java.util.Locale
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
@@ -170,6 +169,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        workspaceDir()
         webView = WebView(this).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
@@ -201,6 +201,20 @@ class MainActivity : AppCompatActivity() {
         val appDir = File(getExternalFilesDir(null) ?: filesDir, "VoltModels")
         if (!appDir.exists()) appDir.mkdirs()
         return appDir
+    }
+
+    private fun workspaceDir(): File {
+        val dl = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val ws = File(dl, "VoltWorkspace")
+        if (!ws.exists()) ws.mkdirs()
+        return ws
+    }
+
+    private fun resolveWorkspaceFile(relOrAbs: String): File {
+        val clean = relOrAbs.trim()
+        if (clean.isEmpty() || clean == ".") return workspaceDir()
+        val direct = File(clean)
+        return if (direct.isAbsolute) direct else File(workspaceDir(), clean)
     }
 
     private fun resolveModelFile(fileName: String): File {
@@ -241,7 +255,6 @@ class MainActivity : AppCompatActivity() {
 
                 dlClient.newCall(reqBuilder.build()).execute().use { resp ->
                     if (resp.code == 416) {
-                        // Файл уже скачан полностью
                         if (target.exists()) target.delete()
                         tmp.renameTo(target)
                         return
@@ -540,7 +553,6 @@ class MainActivity : AppCompatActivity() {
         fun fetchCatalog() {
             thread {
                 val cacheFile = File(filesDir, "models_cache.json")
-                // 1. Мгновенно отдаём кэш / встроенный каталог за 0 мс (без ожидания сети)
                 try {
                     val localRaw = if (cacheFile.exists()) cacheFile.readText() else getFallbackCatalogJson()
                     val instantPayload = buildCatalogPayload(localRaw, false)
@@ -548,7 +560,6 @@ class MainActivity : AppCompatActivity() {
                     runOnUiThread { webView.evaluateJavascript("window.onCatalogLoaded($qInstant)", null) }
                 } catch (_: Exception) {}
 
-                // 2. Фоновая синхронизация с GitHub с коротким таймаутом 4 секунды
                 try {
                     val fastClient = client.newBuilder()
                         .connectTimeout(4, TimeUnit.SECONDS)
@@ -578,9 +589,7 @@ class MainActivity : AppCompatActivity() {
                     val onlinePayload = buildCatalogPayload(mergedStr, true)
                     val qOnline = JSONObject.quote(onlinePayload)
                     runOnUiThread { webView.evaluateJavascript("window.onCatalogLoaded($qOnline)", null) }
-                } catch (_: Exception) {
-                    // Сети нет или GitHub заблокирован — локальный список уже отрисован
-                }
+                } catch (_: Exception) {}
             }
         }
 
@@ -705,9 +714,11 @@ class MainActivity : AppCompatActivity() {
                         rgbBytes = rgb
                     } catch (_: Exception) {}
                 }
-                promptStartTimeMs = System.currentTimeMillis(); firstTokenTimeMs = 0L; nativeGenerate(formattedHistory, sysPrompt, rgbBytes, w, h, temp, topP, maxTokens)
+                promptStartTimeMs = System.currentTimeMillis()
+                firstTokenTimeMs = 0L
+                nativeGenerate(formattedHistory, sysPrompt, rgbBytes, w, h, temp, topP, maxTokens)
                 apiGenerationLatch?.countDown()
-        runOnUiThread { webView.evaluateJavascript("window.onVoltDone()", null) }
+                runOnUiThread { webView.evaluateJavascript("window.onVoltDone()", null) }
             }
         }
 
@@ -725,6 +736,12 @@ class MainActivity : AppCompatActivity() {
         fun getScreenUiState(): String = VoltAgentService.dumpScreenTree()
 
         @JavascriptInterface
+        fun captureScreenForAgent(): String = VoltAgentService.captureScreenDataUrl()
+
+        @JavascriptInterface
+        fun getWorkspacePath(): String = workspaceDir().absolutePath
+
+        @JavascriptInterface
         fun openAccessibilitySettings() {
             runOnUiThread {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
@@ -737,11 +754,56 @@ class MainActivity : AppCompatActivity() {
         fun executeAgentAction(jsonAction: String): String {
             return try {
                 val obj = JSONObject(jsonAction)
-                val action = obj.optString("action", "").lowercase()
-                val target = obj.optString("target", "")
-                val value = obj.optString("value", "")
+                val action = obj.optString("action", obj.optString("cmd", "")).lowercase().trim()
+                val target = obj.optString("target", obj.optString("path", ""))
+                val value = obj.optString("value", obj.optString("content", ""))
 
                 when (action) {
+                    // === ЭКРАН И ОС ===
+                    "read_screen" -> VoltAgentService.dumpScreenTree()
+                    "click_id" -> {
+                        val idx = target.filter { it.isDigit() }.toIntOrNull() ?: -1
+                        if (!VoltAgentService.isEnabled()) "Нужно включить спец. возможности для Volt AI"
+                        else if (VoltAgentService.clickById(idx)) "Нажат элемент [$idx]"
+                        else "Элемент [$idx] не найден"
+                    }
+                    "tap_xy" -> {
+                        val coords = target.split(",")
+                        val x = coords.getOrNull(0)?.trim()?.toFloatOrNull() ?: 0f
+                        val y = coords.getOrNull(1)?.trim()?.toFloatOrNull() ?: 0f
+                        if (!VoltAgentService.isEnabled()) "Нужно включить спец. возможности"
+                        else if (VoltAgentService.tapAt(x, y)) "Тап по ($x, $y)"
+                        else "Не удалось выполнить тап"
+                    }
+                    "click" -> {
+                        if (!VoltAgentService.isEnabled()) "Нужно включить спец. возможности для Volt AI"
+                        else if (VoltAgentService.clickByText(target)) "Нажато: «$target»"
+                        else "Элемент «$target» не найден на экране"
+                    }
+                    "input_text" -> {
+                        val idx = value.filter { it.isDigit() }.toIntOrNull() ?: -1
+                        if (!VoltAgentService.isEnabled()) "Нужно включить спец. возможности для Volt AI"
+                        else if (VoltAgentService.inputText(target, idx)) "Введён текст: «$target»"
+                        else "Поле ввода не найдено"
+                    }
+                    "scroll" -> {
+                        if (!VoltAgentService.isEnabled()) "Нужно включить спец. возможности"
+                        else if (VoltAgentService.scrollDown()) "Экран прокручен вниз"
+                        else "Не удалось прокрутить экран"
+                    }
+                    "scroll_up" -> {
+                        if (!VoltAgentService.isEnabled()) "Нужно включить спец. возможности"
+                        else if (VoltAgentService.scrollUp()) "Экран прокручен вверх"
+                        else "Не удалось прокрутить вверх"
+                    }
+                    "back" -> {
+                        VoltAgentService.goBack()
+                        "Выполнено: Назад"
+                    }
+                    "home" -> {
+                        VoltAgentService.goHome()
+                        "Переход на главный экран"
+                    }
                     "open_app" -> {
                         val pm = packageManager
                         val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
@@ -811,43 +873,61 @@ class MainActivity : AppCompatActivity() {
                         startActivity(Intent(act).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
                         "Открыты настройки ($target)"
                     }
-                    "click_id" -> {
-                        val idx = target.filter { it.isDigit() }.toIntOrNull() ?: -1
-                        if (!VoltAgentService.isEnabled()) "Нужно включить спец. возможности для Volt AI Агента"
-                        else if (VoltAgentService.clickById(idx)) "Нажат элемент [$idx]"
-                        else "Элемент [$idx] не найден"
+
+                    // === CLAUDE CODE: ФАЙЛЫ И SHELL ===
+                    "list_files" -> {
+                        val dir = resolveWorkspaceFile(target)
+                        if (!dir.exists() || !dir.isDirectory) "Папка не найдена: ${dir.absolutePath}"
+                        else {
+                            val list = dir.listFiles()?.sortedBy { it.name }?.take(60)?.joinToString("\n") { f ->
+                                if (f.isDirectory) "[DIR] ${f.name}/" else "${f.name} (${f.length()} B)"
+                            }.orEmpty()
+                            "Папка ${dir.absolutePath}:\n${list.ifEmpty { "(пусто)" }}"
+                        }
                     }
-                    "tap_xy" -> {
-                        val coords = target.split(",")
-                        val x = coords.getOrNull(0)?.trim()?.toFloatOrNull() ?: 0f
-                        val y = coords.getOrNull(1)?.trim()?.toFloatOrNull() ?: 0f
-                        if (!VoltAgentService.isEnabled()) "Нужно включить спец. возможности"
-                        else if (VoltAgentService.tapAt(x, y)) "Тап по ($x, $y)"
-                        else "Не удалось выполнить тап"
+                    "read_file" -> {
+                        val f = resolveWorkspaceFile(target)
+                        if (!f.exists() || !f.isFile) "Файл не найден: ${f.absolutePath}"
+                        else {
+                            val content = f.readText()
+                            if (content.length > 5000) content.take(5000) + "\n...[обрезано, всего ${content.length} символов]"
+                            else content
+                        }
                     }
-                    "click" -> {
-                        if (!VoltAgentService.isEnabled()) "Нужно включить спец. возможности для Volt AI Агента"
-                        else if (VoltAgentService.clickByText(target)) "Нажато: «$target»"
-                        else "Элемент «$target» не найден на экране"
+                    "write_file" -> {
+                        val f = resolveWorkspaceFile(target)
+                        f.parentFile?.mkdirs()
+                        f.writeText(value)
+                        "Файл сохранён: ${f.absolutePath} (${value.length} симв.)"
                     }
-                    "input_text" -> {
-                        val idx = value.filter { it.isDigit() }.toIntOrNull() ?: -1
-                        if (!VoltAgentService.isEnabled()) "Нужно включить спец. возможности для Volt AI Агента"
-                        else if (VoltAgentService.inputText(target, idx)) "Введён текст: «$target»"
-                        else "Поле ввода не найдено"
+                    "append_file" -> {
+                        val f = resolveWorkspaceFile(target)
+                        f.parentFile?.mkdirs()
+                        f.appendText(value)
+                        "Добавлено в файл: ${f.absolutePath}"
                     }
-                    "scroll" -> {
-                        if (!VoltAgentService.isEnabled()) "Нужно включить спец. возможности для Volt AI Агента"
-                        else if (VoltAgentService.scrollDown()) "Экран прокручен вниз"
-                        else "Не удалось прокрутить экран"
+                    "delete_file" -> {
+                        val f = resolveWorkspaceFile(target)
+                        if (f.exists() && f.delete()) "Удалено: ${f.absolutePath}"
+                        else "Не удалось удалить: ${f.absolutePath}"
                     }
-                    "back" -> {
-                        VoltAgentService.goBack()
-                        "Выполнено: Назад"
-                    }
-                    "home" -> {
-                        VoltAgentService.goHome()
-                        "Переход на главный экран"
+                    "run_shell" -> {
+                        val cmd = target.ifEmpty { value }
+                        if (cmd.isBlank()) return "Пустая shell-команда"
+                        val proc = ProcessBuilder("sh", "-c", cmd)
+                            .directory(workspaceDir())
+                            .redirectErrorStream(true)
+                            .start()
+                        val finished = proc.waitFor(10, TimeUnit.SECONDS)
+                        if (!finished) {
+                            proc.destroyForcibly()
+                            "Таймаут команды (10 сек): $cmd"
+                        } else {
+                            val out = proc.inputStream.bufferedReader().readText().trim()
+                            val code = proc.exitValue()
+                            val clipped = if (out.length > 3500) out.take(3500) + "\n...[обрезано]" else out
+                            "Exit code: $code\n${clipped.ifEmpty { "(без вывода)" }}"
+                        }
                     }
                     else -> "Неизвестная команда агента: $action"
                 }
