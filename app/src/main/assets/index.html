@@ -85,7 +85,7 @@
   .dock.agent-active{border-color:var(--acc)}
   .attach-btn,.agent-btn{width:38px;height:38px;border-radius:19px;border:none;background:var(--surf2);color:var(--txt);display:grid;place-items:center;flex-shrink:0;font-size:17px;cursor:pointer;transition:.15s}
   .agent-btn.on{background:var(--acc);color:var(--accTxt)}
-  textarea.inp{flex:1;background:transparent;border:none;color:var(--txt);font-size:15.5px;resize:none;max-height:120px;outline:none;padding:8px 4px}
+  textarea.inp{flex:1;background:transparent;border:none;color:var(--txt);font-size:15.5px;line-height:22px;resize:none;max-height:120px;outline:none;padding:8px 4px}
   .send{width:38px;height:38px;border-radius:19px;border:none;background:var(--acc);color:var(--accTxt);display:grid;place-items:center;flex-shrink:0}
 
   .drawer-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;z-index:30}
@@ -102,7 +102,6 @@
   .back-btn{width:32px;height:32px;border-radius:16px;border:none;background:var(--surf);color:var(--txt);display:none;place-items:center;font-size:16px;cursor:pointer}
   .back-btn.show{display:grid}
 
-  /* Вертикальный минималистичный список категорий настроек */
   .set-cat-list{display:flex;flex-direction:column;gap:8px}
   .set-cat-item{display:flex;align-items:center;gap:12px;padding:13px 14px;background:var(--surf);border:1px solid var(--bdr);border-radius:18px;cursor:pointer;text-align:left;width:100%;color:var(--txt);transition:transform .1s}
   .set-cat-item:active{transform:scale(.99)}
@@ -121,7 +120,6 @@
   .preset-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
   .preset-chip{background:var(--card);color:var(--acc);border:1px solid var(--bdr);padding:5px 10px;border-radius:12px;font-size:11.5px;font-weight:600;cursor:pointer}
 
-  /* Адаптивная карточка оборудования (тёмная и светлая тема) */
   .os-hero{background:var(--hero-bg);border:1px solid var(--hero-bdr);border-radius:22px;padding:16px;position:relative;overflow:hidden}
   .os-tag{font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--acc);font-weight:700}
   .os-soc{font-size:19px;font-weight:700;color:var(--hero-txt);margin-top:4px;line-height:1.25}
@@ -245,7 +243,6 @@
       <button onclick="closeSheets()" style="background:none;border:none;color:var(--sub);font-size:18px;padding:4px">✕</button>
     </div>
 
-    <!-- Главная страница настроек: вертикальный столбик категорий -->
     <div id="setHomeView" class="set-cat-list">
       <button type="button" class="set-cat-item" onclick="openSettingsSection('ui', 'Внешний вид и ИИ')">
         <div class="set-cat-ico">🎨</div>
@@ -293,7 +290,6 @@
       </button>
     </div>
 
-    <!-- Подэкран: Внешний вид и ИИ -->
     <div id="setSub_ui" class="set-subview">
       <div class="card">
         <div class="set-row" style="display:flex;justify-content:space-between;align-items:center">
@@ -324,7 +320,6 @@
       <button class="btn sec" onclick="resetSettings()">Сбросить по умолчанию</button>
     </div>
 
-    <!-- Подэкран: Генерация -->
     <div id="setSub_gen" class="set-subview">
       <div class="card">
         <div class="grp-sub">Точность фактов, креативность и длина ответов</div>
@@ -345,7 +340,6 @@
       <button class="btn" onclick="saveSettings()">Сохранить</button>
     </div>
 
-    <!-- Подэкран: Память и процессор -->
     <div id="setSub_perf" class="set-subview">
       <div class="card">
         <div class="grp-sub">Баланс скорости (ток/с), нагрева и расхода RAM</div>
@@ -365,7 +359,6 @@
       <button class="btn" onclick="saveSettings()">Применить и перезагрузить модель</button>
     </div>
 
-    <!-- Подэкран: Локальный API-сервер -->
     <div id="setSub_api" class="set-subview">
       <div class="card">
         <div class="set-row">
@@ -379,7 +372,6 @@
       </div>
     </div>
 
-    <!-- Подэкран: Оборудование -->
     <div id="setSub_hw" class="set-subview">
       <div class="os-hero" id="hwCard">
         <div class="os-tag">VOLTAGE ENGINE • HARDWARE</div>
@@ -406,12 +398,24 @@ let lastAgentActionKey = '';
 const MAX_AGENT_STEPS = 6;
 const ONE_SHOT_ACTIONS = new Set(['open_app', 'flashlight', 'set_alarm', 'set_timer', 'search_web', 'open_settings']);
 
-const AGENT_SYS_PROMPT = `Ты — автономный AI-агент Volt (код/файлы и управление Android).
+const APP_ALIASES = {
+  'ютуб': 'YouTube', 'ютюб': 'YouTube', 'youtube': 'YouTube',
+  'телеграм': 'Telegram', 'телега': 'Telegram', 'тг': 'Telegram', 'tg': 'Telegram',
+  'хром': 'Chrome', 'браузер': 'Chrome', 'гугл': 'Chrome',
+  'настройки': 'Настройки', 'settings': 'Настройки',
+  'камера': 'Камера', 'калькулятор': 'Калькулятор',
+  'вк': 'VK', 'вконтакте': 'VK',
+  'ватсап': 'WhatsApp', 'вацап': 'WhatsApp',
+  'тикток': 'TikTok', 'тиктоке': 'TikTok',
+  'термукс': 'Termux', 'галерея': 'Галерея'
+};
+
+const AGENT_SYS_PROMPT = `Ты — автономный AI-агент Volt для Android (управление телефоном и файлы в VoltWorkspace).
 Отвечай СТРОГО одним JSON-объектом без лишнего текста:
 {"action":"КОМАНДА","target":"ПАРАМЕТР","value":"ДОП"}
 
 Команды:
-- open_app (target: имя приложения)
+- open_app (target: название нужного приложения на английском или русском, например "YouTube", "Telegram", "Chrome". Никогда не открывай "com.voltage.ai")
 - click_id (target: номер id элемента с экрана)
 - click (target: точный текст кнопки)
 - tap_xy (target: "x,y")
@@ -427,7 +431,34 @@ const AGENT_SYS_PROMPT = `Ты — автономный AI-агент Volt (ко
 - run_shell (target: "команда sh")
 - done (target: "отчёт о выполнении")
 
+Пример: Цель "Открой ютуб" -> {"action":"open_app","target":"YouTube","value":""}
 Если действие уже выполнено — сразу верни {"action":"done","target":"..."}.`;
+
+function getCleanScreenContext() {
+  if (!window.VoltAndroid || !VoltAndroid.getScreenUiState) return 'Экран недоступен.';
+  const raw = VoltAndroid.getScreenUiState();
+  try {
+    const obj = JSON.parse(raw);
+    if (obj && obj.package === 'com.voltage.ai') {
+      return 'Сейчас открыт чат Volt AI (нужное приложение ещё не запущено).';
+    }
+  } catch (_) {}
+  return raw;
+}
+
+function normalizeAppTarget(rawTarget, goalText) {
+  let t = String(rawTarget || '').trim();
+  const tl = t.toLowerCase();
+  if (APP_ALIASES[tl]) return APP_ALIASES[tl];
+  // Если модель всё же подставила пакет самого Volt AI — извлекаем нужное приложение из цели пользователя
+  if (!t || tl.includes('voltage') || tl.includes('volt')) {
+    const gl = String(goalText || '').toLowerCase();
+    for (const [k, v] of Object.entries(APP_ALIASES)) {
+      if (gl.includes(k)) return v;
+    }
+  }
+  return t;
+}
 
 function refreshAgentBar() {
   const btn = document.getElementById('agentToggleBtn');
@@ -439,7 +470,7 @@ function refreshAgentBar() {
     btn.classList.add('on');
     strip.classList.add('show');
     dock.classList.add('agent-active');
-    inp.placeholder = 'Задача агенту (код, файлы, экран)...';
+    inp.placeholder = 'Задача агенту...';
     const hasAcc = (window.VoltAndroid && VoltAndroid.isAgentAccessibilityEnabled) ? VoltAndroid.isAgentAccessibilityEnabled() : false;
     hint.style.display = hasAcc ? 'none' : 'inline-block';
   } else {
@@ -1078,11 +1109,10 @@ function send() {
       agentStep = 1;
       agentHistory = [];
       lastAgentActionKey = '';
-      const screenInfo = (VoltAndroid.getScreenUiState) ? VoltAndroid.getScreenUiState() : '';
-      const agentPrompt = `<|im_start|>user\nЦель: ${agentGoal}\nШаг ${agentStep}/${MAX_AGENT_STEPS}.\nЭкран:\n${screenInfo}<|im_end|>\n<|im_start|>assistant\n`;
-      VoltAndroid.sendPrompt(agentPrompt, AGENT_SYS_PROMPT, visionDataUrl, 0.15, cfg.topP, 384);
+      const screenInfo = getCleanScreenContext();
+      const agentPrompt = `<|im_start|>user\nЦель: ${agentGoal}\nШаг ${agentStep}/${MAX_AGENT_STEPS}.\nКонтекст: ${screenInfo}<|im_end|>\n<|im_start|>assistant\n`;
+      VoltAndroid.sendPrompt(agentPrompt, AGENT_SYS_PROMPT, visionDataUrl, 0.1, cfg.topP, 384);
     } else {
-      // Берём до 8 последних сообщений, чтобы не перегружать контекст и RAM
       const recent = c.messages.slice(-8).map(m =>
         m.role === 'user'
           ? '<|im_start|>user\n' + m.llmText + '<|im_end|>\n'
@@ -1138,6 +1168,9 @@ window.onVoltDone = () => {
       try {
         const cmd = JSON.parse(match[0]);
         const actName = (cmd.action || cmd.cmd || '').toLowerCase();
+        if (actName === 'open_app') {
+          cmd.target = normalizeAppTarget(cmd.target, agentGoal);
+        }
         const actKey = actName + ':' + String(cmd.target || '').toLowerCase().trim();
 
         if (actName === 'done' || agentStep >= MAX_AGENT_STEPS || (actKey === lastAgentActionKey && actKey !== ':')) {
@@ -1159,13 +1192,12 @@ window.onVoltDone = () => {
           nextVisionImg = (VoltAndroid.captureScreenForAgent) ? VoltAndroid.captureScreenForAgent() : '';
           execRes = nextVisionImg ? 'Снимок экрана передан в Vision' : 'Нет доступа к снимку экрана';
         } else {
-          execRes = VoltAndroid.executeAgentAction(match[0]);
+          execRes = VoltAndroid.executeAgentAction(JSON.stringify(cmd));
         }
 
         const logLine = `⚡ Шаг ${agentStep} [${actName}]: ${execRes}`;
         agentHistory.push(logLine);
 
-        // Если это одиночная системная команда и цель короткая (например "Открой ютуб") — не зацикливаем
         const hasAcc = (window.VoltAndroid && VoltAndroid.isAgentAccessibilityEnabled) ? VoltAndroid.isAgentAccessibilityEnabled() : false;
         const isShortSingleGoal = ONE_SHOT_ACTIONS.has(actName) && (!hasAcc || agentGoal.trim().split(/\s+/).length <= 4);
 
@@ -1182,10 +1214,10 @@ window.onVoltDone = () => {
 
         agentStep++;
         setTimeout(() => {
-          const nextScreen = (VoltAndroid.getScreenUiState) ? VoltAndroid.getScreenUiState() : '';
+          const nextScreen = getCleanScreenContext();
           const nextPrompt = `<|im_start|>user\nЦель: ${agentGoal}\nСделано:\n${agentHistory.join('\n')}\n\nШаг ${agentStep}/${MAX_AGENT_STEPS}. Экран:\n${nextScreen}<|im_end|>\n<|im_start|>assistant\n`;
           appendBotPlaceholder('🤖 Шаг ' + agentStep + '/' + MAX_AGENT_STEPS + '...');
-          VoltAndroid.sendPrompt(nextPrompt, AGENT_SYS_PROMPT, nextVisionImg, 0.15, cfg.topP, 384);
+          VoltAndroid.sendPrompt(nextPrompt, AGENT_SYS_PROMPT, nextVisionImg, 0.1, cfg.topP, 384);
         }, 1100);
         return;
       } catch (e) {}
