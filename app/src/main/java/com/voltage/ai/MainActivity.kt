@@ -4,10 +4,10 @@ import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.hardware.camera2.CameraManager
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -69,6 +69,9 @@ class MainActivity : AppCompatActivity() {
     private var ttsEngine: TextToSpeech? = null
     @Volatile private var promptStartTimeMs: Long = 0L
     @Volatile private var firstTokenTimeMs: Long = 0L
+
+    @Volatile private var sdProcess: Process? = null
+    @Volatile private var sdStoppedByUser = false
 
     private val attachTargetLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -151,6 +154,40 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val sdModelPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            thread {
+                try {
+                    val rawName = uri.lastPathSegment?.substringAfterLast('/')?.substringAfterLast(':') ?: "custom_sd.safetensors"
+                    val ext = when {
+                        rawName.endsWith(".gguf", true) -> ".gguf"
+                        rawName.endsWith(".ckpt", true) -> ".ckpt"
+                        else -> ".safetensors"
+                    }
+                    val base = rawName.substringBeforeLast('.').replace(Regex("[^a-zA-Z0-9._-]"), "_").ifBlank { "custom_sd" }
+                    val target = File(sdModelsDir(), "$base$ext")
+                    if (target.exists()) target.delete()
+                    contentResolver.openInputStream(uri)?.use { input ->
+                        FileOutputStream(target).use { output ->
+                            val buf = ByteArray(262144)
+                            while (true) {
+                                val r = input.read(buf)
+                                if (r <= 0) break
+                                output.write(buf, 0, r)
+                            }
+                        }
+                    }
+                    runOnUiThread { webView.evaluateJavascript("window.onSdModelsUpdated()", null) }
+                } catch (e: Exception) {
+                    val err = JSONObject.quote(e.message ?: "Ошибка импорта SD-модели")
+                    runOnUiThread { webView.evaluateJavascript("window.onSdError($err)", null) }
+                }
+            }
+        }
+    }
+
     private val smartDns = object : Dns {
         override fun lookup(hostname: String): List<InetAddress> {
             return try {
@@ -184,6 +221,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         workspaceDir()
+        sdModelsDir()
         webView = WebView(this).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
@@ -214,6 +252,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         isApiServerRunning = false
         try { localApiServer?.close() } catch (_: Exception) {}
+        try { sdProcess?.destroyForcibly() } catch (_: Exception) {}
         ttsEngine?.shutdown()
         super.onDestroy()
     }
@@ -222,6 +261,19 @@ class MainActivity : AppCompatActivity() {
         val appDir = File(getExternalFilesDir(null) ?: filesDir, "VoltModels")
         if (!appDir.exists()) appDir.mkdirs()
         return appDir
+    }
+
+    private fun sdModelsDir(): File {
+        val d = File(modelsDir(), "sd")
+        if (!d.exists()) d.mkdirs()
+        return d
+    }
+
+    private fun studioOutputDir(): File {
+        val pics = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+        val dir = File(pics, "VoltStudio")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
     }
 
     private fun workspaceDir(): File {
@@ -245,6 +297,10 @@ class MainActivity : AppCompatActivity() {
         val pubFile = File(pubDir, fileName)
         if (pubFile.exists() && pubFile.length() > 10_000_000L) return pubFile
         return appFile
+    }
+
+    private fun resolveSdBinary(): File {
+        return File(applicationInfo.nativeLibraryDir, "libvolt_sd.so")
     }
 
     private fun translitRuToEn(input: String): String {
@@ -325,7 +381,10 @@ class MainActivity : AppCompatActivity() {
         return null
     }
 
-    private fun downloadSingleFile(urlStr: String, target: File, progressStart: Int, progressSpan: Int, id: String) {
+    private fun downloadSingleFile(
+        urlStr: String, target: File, progressStart: Int, progressSpan: Int,
+        id: String, jsProgressFn: String = "window.onDownloadProgress"
+    ) {
         val tmp = File(target.parentFile, target.name + ".part")
         var downloaded = if (tmp.exists()) tmp.length() else 0L
         var lastPct = -1
@@ -382,7 +441,7 @@ class MainActivity : AppCompatActivity() {
                                 if (pct != lastPct) {
                                     lastPct = pct
                                     runOnUiThread {
-                                        webView.evaluateJavascript("window.onDownloadProgress('$id', $pct)", null)
+                                        webView.evaluateJavascript("$jsProgressFn('$id', $pct)", null)
                                     }
                                 }
                             }
@@ -765,6 +824,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun saveBase64PngToFile(dataUrl: String, target: File): Boolean {
+        return try {
+            val clean = dataUrl.substringAfter(",")
+            val bytes = Base64.decode(clean, Base64.DEFAULT)
+            FileOutputStream(target).use { it.write(bytes) }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     inner class VoltBridge {
         @JavascriptInterface
         fun getDeviceRamJson(): String {
@@ -808,10 +878,10 @@ class MainActivity : AppCompatActivity() {
 
             val supported = JSONArray().apply {
                 put(JSONObject().put("tier", "Volt Ion v2.5 • 1.5B Fast").put("quant", "Qwen 2.5 1.5B • Текст и файлы").put("status", "Максимальная скорость"))
-                put(JSONObject().put("tier", "Volt Neutron v2.5 • 1.5B Uncensored").put("quant", "Qwen 2.5 1.5B Abliterated • Без фильтров").put("status", "Свободный диалог"))
-                put(JSONObject().put("tier", "Volt Photon v2.0 • 2B Vision").put("quant", "Qwen2-VL 2B + mmproj FP16").put("status", "Субфлагман (фото + текст)"))
+                put(JSONObject().put("tier", "Volt Neutron v2.6 • 3B Vision").put("quant", "Qwen2.5-VL 3B • Фото + текст").put("status", "Оптимум"))
+                put(JSONObject().put("tier", "Volt Studio • SD-Turbo / SD 1.5").put("quant", "stable-diffusion.cpp • Локально без цензуры").put("status", "txt2img / img2img / inpaint"))
                 if (totalGb >= 7.5) {
-                    put(JSONObject().put("tier", "Volt Plasma v2.5 • 3B Vision").put("quant", "Qwen2.5-VL 3B + mmproj Q8_0").put("status", if (hasDotProd) "Флагман (ускорение DotProd)" else "Флагман"))
+                    put(JSONObject().put("tier", "Volt Plasma v3.0 • 8B").put("quant", "Qwen 3 8B Q4_K_M").put("status", if (hasDotProd) "Флагман (DotProd)" else "Флагман"))
                 }
             }
 
@@ -832,6 +902,279 @@ class MainActivity : AppCompatActivity() {
                 getLaunchableApps().take(70).joinToString(", ") { it.first }
             } catch (_: Exception) {
                 ""
+            }
+        }
+
+        // === VOLT STUDIO (STABLE DIFFUSION LOCAL ENGINE) ===
+        @JavascriptInterface
+        fun getSdModelsJson(): String {
+            val sdDir = sdModelsDir()
+            val binOk = resolveSdBinary().exists()
+            val builtIns = listOf(
+                mapOf(
+                    "id" to "sd-turbo",
+                    "file" to "sd-turbo.safetensors",
+                    "name" to "SD-Turbo (Быстрая)",
+                    "desc" to "4 шага, CFG 1.0 • Генерация за ~25-45 сек на CPU, без цензуры",
+                    "size_mb" to 1710,
+                    "steps" to 4,
+                    "cfg" to 1.0,
+                    "url" to "https://huggingface.co/stabilityai/sd-turbo/resolve/main/sd_turbo.safetensors"
+                ),
+                mapOf(
+                    "id" to "dreamshaper-8",
+                    "file" to "dreamshaper-8.safetensors",
+                    "name" to "DreamShaper 8 (Без цензуры)",
+                    "desc" to "15 шагов, CFG 7.0 • Реализм, арт, улучшение фото и маска (inpainting)",
+                    "size_mb" to 2130,
+                    "steps" to 15,
+                    "cfg" to 7.0,
+                    "url" to "https://huggingface.co/Lykon/DreamShaper/resolve/main/DreamShaper_8_pruned.safetensors"
+                )
+            )
+
+            val arr = JSONArray()
+            val knownFiles = HashSet<String>()
+            for (b in builtIns) {
+                val fname = b["file"] as String
+                knownFiles.add(fname)
+                val f = File(sdDir, fname)
+                val downloaded = f.exists() && f.length() > 100_000_000L
+                arr.put(JSONObject()
+                    .put("id", b["id"])
+                    .put("name", b["name"])
+                    .put("desc", b["desc"])
+                    .put("size_mb", b["size_mb"])
+                    .put("default_steps", b["steps"])
+                    .put("default_cfg", b["cfg"])
+                    .put("url", b["url"])
+                    .put("path", f.absolutePath)
+                    .put("downloaded", downloaded)
+                    .put("custom", false))
+            }
+
+            sdDir.listFiles()?.filter {
+                !knownFiles.contains(it.name) && it.length() > 50_000_000L &&
+                    (it.name.endsWith(".safetensors", true) || it.name.endsWith(".ckpt", true) || it.name.endsWith(".gguf", true))
+            }?.sortedBy { it.name }?.forEach { f ->
+                arr.put(JSONObject()
+                    .put("id", "custom-" + f.nameWithoutExtension)
+                    .put("name", f.nameWithoutExtension)
+                    .put("desc", "Локальный чекпоинт (${f.extension.uppercase()}) • ${f.length() / (1024 * 1024)} МБ")
+                    .put("size_mb", f.length() / (1024 * 1024))
+                    .put("default_steps", 15)
+                    .put("default_cfg", 7.0)
+                    .put("url", "")
+                    .put("path", f.absolutePath)
+                    .put("downloaded", true)
+                    .put("custom", true))
+            }
+
+            return JSONObject()
+                .put("engine_ready", binOk)
+                .put("models", arr)
+                .toString()
+        }
+
+        @JavascriptInterface
+        fun downloadSdModel(id: String, urlStr: String) {
+            thread {
+                try {
+                    val fileName = "$id.safetensors"
+                    val target = File(sdModelsDir(), fileName)
+                    downloadSingleFile(urlStr, target, 0, 100, id, "window.onSdDownloadProgress")
+                    runOnUiThread { webView.evaluateJavascript("window.onSdDownloadDone('$id')", null) }
+                } catch (e: Exception) {
+                    val err = JSONObject.quote(e.message ?: "Ошибка загрузки SD-модели")
+                    runOnUiThread { webView.evaluateJavascript("window.onSdDownloadError('$id', $err)", null) }
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun deleteSdModel(path: String): Boolean {
+            return try {
+                val f = File(path)
+                if (f.exists()) f.delete() else false
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun importSdModelFile() {
+            runOnUiThread {
+                sdModelPickerLauncher.launch(arrayOf("*/*"))
+            }
+        }
+
+        @JavascriptInterface
+        fun stopSdGeneration() {
+            sdStoppedByUser = true
+            try { sdProcess?.destroyForcibly() } catch (_: Exception) {}
+            sdProcess = null
+        }
+
+        @JavascriptInterface
+        fun generateImage(paramsJson: String) {
+            thread(name = "VoltSdWorker") {
+                sdStoppedByUser = false
+                val tStart = System.currentTimeMillis()
+                try {
+                    val bin = resolveSdBinary()
+                    if (!bin.exists()) {
+                        val err = JSONObject.quote("Движок libvolt_sd.so не найден в APK.")
+                        runOnUiThread { webView.evaluateJavascript("window.onSdError($err)", null) }
+                        return@thread
+                    }
+
+                    val p = JSONObject(paramsJson)
+                    val modelPath = p.optString("modelPath", "")
+                    val modelFile = File(modelPath)
+                    if (!modelFile.exists()) {
+                        val err = JSONObject.quote("Сначала скачай или импортируй SD-модель.")
+                        runOnUiThread { webView.evaluateJavascript("window.onSdError($err)", null) }
+                        return@thread
+                    }
+
+                    val mode = p.optString("mode", "txt2img")
+                    val prompt = p.optString("prompt", "").trim()
+                    val negPrompt = p.optString("negPrompt", "").trim()
+                    val width = (p.optInt("width", 512) / 64) * 64
+                    val height = (p.optInt("height", 512) / 64) * 64
+                    val steps = p.optInt("steps", 8).coerceIn(1, 40)
+                    val cfgScale = p.optDouble("cfgScale", 1.0).coerceIn(0.5, 15.0)
+                    val strength = p.optDouble("strength", 0.65).coerceIn(0.1, 0.99)
+                    val seed = p.optLong("seed", -1L)
+                    val threads = p.optInt("threads", 4).coerceIn(1, 6)
+                    val initB64 = p.optString("initImage", "")
+                    val maskB64 = p.optString("maskImage", "")
+
+                    val outFile = File(cacheDir, "sd_out_${System.currentTimeMillis()}.png")
+                    val cmd = mutableListOf(
+                        bin.absolutePath,
+                        "-m", modelFile.absolutePath,
+                        "-p", prompt,
+                        "-W", width.toString(),
+                        "-H", height.toString(),
+                        "--steps", steps.toString(),
+                        "--cfg-scale", String.format(Locale.US, "%.2f", cfgScale),
+                        "--sampling-method", "euler_a",
+                        "-t", threads.toString(),
+                        "-s", seed.toString(),
+                        "--vae-tiling",
+                        "-o", outFile.absolutePath
+                    )
+                    if (negPrompt.isNotEmpty()) {
+                        cmd.add("-n")
+                        cmd.add(negPrompt)
+                    }
+
+                    if ((mode == "img2img" || mode == "inpaint") && initB64.isNotEmpty()) {
+                        val initFile = File(cacheDir, "sd_init.png")
+                        if (saveBase64PngToFile(initB64, initFile)) {
+                            cmd.add("-i")
+                            cmd.add(initFile.absolutePath)
+                            cmd.add("--strength")
+                            cmd.add(String.format(Locale.US, "%.2f", strength))
+                        }
+                    }
+                    if (mode == "inpaint" && maskB64.isNotEmpty()) {
+                        val maskFile = File(cacheDir, "sd_mask.png")
+                        if (saveBase64PngToFile(maskB64, maskFile)) {
+                            cmd.add("--mask")
+                            cmd.add(maskFile.absolutePath)
+                        }
+                    }
+
+                    runOnUiThread {
+                        webView.evaluateJavascript("window.onSdProgress(5, 'Загрузка весов модели в RAM...')", null)
+                    }
+
+                    val pb = ProcessBuilder(cmd)
+                        .directory(cacheDir)
+                        .redirectErrorStream(true)
+                    val proc = pb.start()
+                    sdProcess = proc
+
+                    val logTail = ArrayDeque<String>()
+                    val stepRegex = Regex("(\\d+)\\s*/\\s*(\\d+)")
+                    val pctRegex = Regex("(\\d+)%")
+                    val lineBuf = ByteArrayOutputStream()
+                    val stream = proc.inputStream
+
+                    while (true) {
+                        val b = stream.read()
+                        if (b == -1) break
+                        if (b == '\n'.code || b == '\r'.code) {
+                            if (lineBuf.size() > 0) {
+                                val line = lineBuf.toString("UTF-8").trim()
+                                lineBuf.reset()
+                                if (line.isNotEmpty()) {
+                                    if (logTail.size >= 12) logTail.removeFirst()
+                                    logTail.addLast(line)
+
+                                    val mStep = stepRegex.find(line)
+                                    val mPct = pctRegex.find(line)
+                                    when {
+                                        mStep != null && (line.contains("|") || line.contains("step", true) || line.contains("it/s", true) || line.contains("s/it", true)) -> {
+                                            val cur = mStep.groupValues[1].toIntOrNull() ?: 0
+                                            val tot = mStep.groupValues[2].toIntOrNull() ?: steps
+                                            if (tot > 0 && cur <= tot) {
+                                                val pct = 15 + ((cur * 78) / tot)
+                                                val msg = JSONObject.quote("Шаг $cur / $tot...")
+                                                runOnUiThread { webView.evaluateJavascript("window.onSdProgress($pct, $msg)", null) }
+                                            }
+                                        }
+                                        mPct != null -> {
+                                            val pct = (mPct.groupValues[1].toIntOrNull() ?: 10).coerceIn(10, 95)
+                                            val msg = JSONObject.quote("Генерация: $pct%...")
+                                            runOnUiThread { webView.evaluateJavascript("window.onSdProgress($pct, $msg)", null) }
+                                        }
+                                        line.contains("decoding", true) || line.contains("vae", true) -> {
+                                            runOnUiThread { webView.evaluateJavascript("window.onSdProgress(94, 'Декодирование VAE...')", null) }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            lineBuf.write(b)
+                        }
+                    }
+
+                    val exitCode = proc.waitFor()
+                    sdProcess = null
+
+                    if (sdStoppedByUser) {
+                        runOnUiThread { webView.evaluateJavascript("window.onSdError('Генерация остановлена')", null) }
+                        return@thread
+                    }
+
+                    if (exitCode == 0 && outFile.exists() && outFile.length() > 1000L) {
+                        val savedFile = File(studioOutputDir(), "Volt_${System.currentTimeMillis()}.png")
+                        outFile.copyTo(savedFile, overwrite = true)
+                        MediaScannerConnection.scanFile(this@MainActivity, arrayOf(savedFile.absolutePath), arrayOf("image/png"), null)
+
+                        val pngBytes = outFile.readBytes()
+                        val dataUrl = "data:image/png;base64," + Base64.encodeToString(pngBytes, Base64.NO_WRAP)
+                        outFile.delete()
+
+                        val elapsed = (System.currentTimeMillis() - tStart) / 1000.0
+                        val qUrl = JSONObject.quote(dataUrl)
+                        val qPath = JSONObject.quote(savedFile.absolutePath)
+                        runOnUiThread {
+                            webView.evaluateJavascript("window.onSdDone($qUrl, $qPath, $elapsed)", null)
+                        }
+                    } else {
+                        val errTxt = logTail.takeLast(4).joinToString("\n").ifBlank { "Код выхода: $exitCode" }
+                        val qErr = JSONObject.quote(errTxt)
+                        runOnUiThread { webView.evaluateJavascript("window.onSdError($qErr)", null) }
+                    }
+                } catch (e: Exception) {
+                    sdProcess = null
+                    val qErr = JSONObject.quote(e.message ?: "Ошибка генерации изображения")
+                    runOnUiThread { webView.evaluateJavascript("window.onSdError($qErr)", null) }
+                }
             }
         }
 

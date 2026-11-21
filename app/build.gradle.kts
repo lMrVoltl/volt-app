@@ -2,15 +2,17 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
 android {
     namespace = "com.voltage.ai"
     compileSdk = 34
+
     defaultConfig {
         applicationId = "com.voltage.ai"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.1.1"
+        versionCode = 5
+        versionName = "1.2.0"
         ndk { abiFilters += listOf("arm64-v8a") }
         externalNativeBuild {
             cmake {
@@ -23,6 +25,13 @@ android {
             }
         }
     }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     signingConfigs {
         create("voltSign") {
             storeFile = file("volt.keystore")
@@ -31,6 +40,7 @@ android {
             keyPassword = "voltage123"
         }
     }
+
     buildTypes {
         debug {
             signingConfig = signingConfigs.getByName("voltSign")
@@ -45,15 +55,18 @@ android {
             signingConfig = signingConfigs.getByName("voltSign")
         }
     }
+
     externalNativeBuild {
         cmake { path = file("src/main/cpp/CMakeLists.txt") }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
 }
+
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
