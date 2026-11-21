@@ -176,9 +176,9 @@
   .volt-switch input:checked + .sw-track:before{transform:translateX(20px)}
   .volt-switch:active .sw-track:before{width:26px}
 
-  /* === VOLT STUDIO (SD) === */
-  .sd-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;background:var(--surf);padding:4px;border-radius:16px;border:1px solid var(--bdr);margin-bottom:12px}
-  .sd-tab{border:none;background:transparent;color:var(--sub);padding:9px 6px;border-radius:12px;font-size:12.5px;font-weight:600;cursor:pointer;transition:all .24s var(--spring)}
+  /* === VOLT STUDIO (SD + REAL-ESRGAN) === */
+  .sd-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;background:var(--surf);padding:4px;border-radius:16px;border:1px solid var(--bdr);margin-bottom:12px}
+  .sd-tab{border:none;background:transparent;color:var(--sub);padding:9px 4px;border-radius:12px;font-size:12px;font-weight:600;cursor:pointer;transition:all .24s var(--spring)}
   .sd-tab.active{background:var(--acc);color:var(--accTxt);box-shadow:0 2px 10px rgba(0,0,0,.18)}
   .sd-canvas-box{position:relative;width:100%;max-width:340px;margin:10px auto 0;border-radius:16px;overflow:hidden;border:1px solid var(--bdr);background:#0b0b0c;aspect-ratio:1/1;display:none}
   .sd-canvas-box.show{display:block;animation:msgPopBot .28s var(--fluid)}
@@ -258,12 +258,12 @@
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
   </button>
   <div style="display:flex;gap:2px">
-    <button class="icon-btn" title="Volt Студия (генерация фото)" onclick="openStudio()">🎨</button>
+    <button class="icon-btn" title="Volt Студия (генерация и апскейл)" onclick="openStudio()">🎨</button>
     <button class="icon-btn" onclick="createNewChat()">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
     </button>
     <button class="icon-btn" onclick="openSettings()">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
   </div>
 </header>
@@ -316,7 +316,7 @@
   </div>
 </div>
 
-<!-- Шторка: VOLT СТУДИЯ (Генерация / Редактирование / Маска) -->
+<!-- Шторка: VOLT СТУДИЯ (Генерация / Редактирование / Маска / Апскейл 4×) -->
 <div class="sheet-bg" id="studioSheet" onclick="if(event.target===this)closeSheets()">
   <div class="sheet">
     <div class="sheet-grab"></div>
@@ -329,13 +329,14 @@
     </div>
 
     <div class="sd-tabs">
-      <button type="button" class="sd-tab active" id="sdTab_txt2img" onclick="setSdMode('txt2img')">Текст → Фото</button>
-      <button type="button" class="sd-tab" id="sdTab_img2img" onclick="setSdMode('img2img')">Фото + Промпт</button>
-      <button type="button" class="sd-tab" id="sdTab_inpaint" onclick="setSdMode('inpaint')">Кисть (Маска)</button>
+      <button type="button" class="sd-tab active" id="sdTab_txt2img" onclick="setSdMode('txt2img')">Текст</button>
+      <button type="button" class="sd-tab" id="sdTab_img2img" onclick="setSdMode('img2img')">Фото</button>
+      <button type="button" class="sd-tab" id="sdTab_inpaint" onclick="setSdMode('inpaint')">Маска</button>
+      <button type="button" class="sd-tab" id="sdTab_upscale" onclick="setSdMode('upscale')">🔍 4×</button>
     </div>
 
     <!-- Блок выбора модели SD -->
-    <div class="card" style="margin-bottom:12px">
+    <div class="card" id="sdModelCard" style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
         <div style="font-size:13px;font-weight:600">Модель генерации</div>
         <button type="button" class="preset-chip" onclick="toggleSdModelsPanel()">📦 Модели / Скачать</button>
@@ -349,48 +350,73 @@
       </div>
     </div>
 
+    <!-- Блок статуса апскейлера Real-ESRGAN (виден в авто-апскейле и во вкладке 4×) -->
+    <div class="card" id="sdUpscalerCard" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div>
+          <div style="font-size:13.5px;font-weight:600">🔍 Real-ESRGAN 4×</div>
+          <div class="set-hint" id="upscalerHint">Увеличивает 320×320 → 1280×1280 с прорисовкой деталей</div>
+        </div>
+        <div id="upscalerToggleWrap" style="display:none">
+          <label class="volt-switch">
+            <input type="checkbox" id="sdAutoUpscale" checked>
+            <span class="sw-track"></span>
+          </label>
+        </div>
+      </div>
+      <div id="upscalerDownloadBox" style="margin-top:8px">
+        <button type="button" class="btn sec" style="margin-top:0;padding:9px" onclick="startUpscalerDownload()">⬇ Скачать апскейлер Real-ESRGAN (64 МБ)</button>
+      </div>
+    </div>
+
     <!-- Блок исходного фото и рисования маски -->
     <div class="card" id="sdImgEditorCard" style="display:none;margin-bottom:12px">
       <input type="file" id="sdImgInput" accept="image/*" style="display:none" onchange="handleSdInitImage(this)">
       <div style="display:flex;gap:8px;align-items:center">
         <button type="button" class="btn sec" style="margin-top:0;flex:1;padding:9px" onclick="document.getElementById('sdImgInput').click()">🖼 Выбрать фото</button>
-        <button type="button" class="btn sec" id="sdClearMaskBtn" style="margin-top:0;width:auto;padding:9px 12px;display:none" onclick="clearSdMask()">🧹 Очистить маску</button>
+        <button type="button" class="btn sec" id="sdClearMaskBtn" style="margin-top:0;width:auto;padding:9px 12px;display:none" onclick="clearSdMask()">🧹 Очистить</button>
       </div>
       <div id="sdBrushControls" style="display:none;margin-top:10px">
-        <div class="set-head"><span>Размер кисти (закрась то, что изменить/удалить)</span><b id="sdBrushVal">28 px</b></div>
+        <div class="set-head"><span>Кисть (закрась область удаления/дорисовки)</span><b id="sdBrushVal">28 px</b></div>
         <input type="range" id="sdBrushSize" min="10" max="70" step="2" value="28" oninput="document.getElementById('sdBrushVal').innerText=this.value+' px'">
       </div>
       <div class="sd-canvas-box" id="sdCanvasBox">
         <canvas id="sdBaseCanvas" width="512" height="512"></canvas>
         <canvas id="sdMaskCanvas" width="512" height="512"></canvas>
       </div>
-      <div class="set-row" style="margin-top:10px;padding-top:10px">
+      <div class="set-row" id="sdStrengthRow" style="margin-top:10px;padding-top:10px">
         <div class="set-head"><span>Сила изменений (Strength)</span><b id="sdStrengthVal">0.55</b></div>
         <input type="range" id="sdStrength" min="0.15" max="0.95" step="0.05" value="0.55" oninput="document.getElementById('sdStrengthVal').innerText=this.value">
-        <div class="set-hint">0.25–0.45 улучшить качество и детали • 0.60–0.85 перерисовать или удалить объект</div>
+        <div class="set-hint">0.25–0.45 улучшить качество • 0.60–0.85 перерисовать или удалить</div>
       </div>
     </div>
 
-    <!-- Промпт и параметры -->
-    <div class="card">
+    <!-- Промпт и параметры генерации -->
+    <div class="card" id="sdPromptCard">
       <div class="set-head"><span>Описание (лучше на английском)</span></div>
-      <textarea class="sys-inp" id="sdPrompt" rows="3" placeholder="a cinematic photo of a cyberpunk street at night, neon lights, ultra detailed, 8k"></textarea>
+      <textarea class="sys-inp" id="sdPrompt" rows="3" placeholder="a cinematic photo of a cyberpunk street at night, neon lights, ultra detailed"></textarea>
       <div class="set-head" style="margin-top:10px"><span>Негативный промпт (что убрать)</span></div>
       <input class="sys-inp" id="sdNegPrompt" value="blurry, low quality, deformed, watermark, text, ugly">
 
       <div class="sd-grid-2">
         <div>
-          <div class="grp-sub">Размер</div>
+          <div class="grp-sub">Базовый размер</div>
           <select id="sdSize">
-            <option value="384x384">384×384 (быстро)</option>
-            <option value="512x512" selected>512×512 (стандарт)</option>
+            <option value="256x256">256×256 (турбо → 1024)</option>
+            <option value="320x320" selected>320×320 (быстро → 1280)</option>
+            <option value="384x384">384×384 (баланс)</option>
+            <option value="512x512">512×512 (стандарт)</option>
             <option value="512x768">512×768 (портрет)</option>
             <option value="768x512">768×512 (пейзаж)</option>
           </select>
         </div>
         <div>
-          <div class="grp-sub">Seed (-1 = случайный)</div>
-          <input class="sys-inp" id="sdSeed" type="number" value="-1">
+          <div class="grp-sub">Ускорение CPU</div>
+          <select id="sdQuant">
+            <option value="q8_0" selected>q8_0 (быстро + чётко)</option>
+            <option value="q4_0">q4_0 (макс. скорость)</option>
+            <option value="f16">f16 (без сжатия)</option>
+          </select>
         </div>
       </div>
 
@@ -403,6 +429,11 @@
           <div class="set-head" style="font-size:12.5px"><span>CFG Scale</span><b id="sdCfgVal">1.0</b></div>
           <input type="range" id="sdCfg" min="1.0" max="12.0" step="0.5" value="1.0" oninput="document.getElementById('sdCfgVal').innerText=this.value">
         </div>
+      </div>
+
+      <div style="margin-top:8px">
+        <div class="grp-sub">Seed (-1 = случайный)</div>
+        <input class="sys-inp" id="sdSeed" type="number" value="-1">
       </div>
     </div>
 
@@ -424,9 +455,10 @@
     <div class="sd-res-box" id="sdResBox">
       <img id="sdResImg">
       <div id="sdResMeta" style="font-size:12px;color:var(--sub);margin-top:6px;text-align:center"></div>
-      <div style="display:flex;gap:8px;margin-top:8px">
-        <button type="button" class="btn sec" style="margin-top:0;flex:1;padding:9px" onclick="useSdResultAsInput('img2img')">✏️ Улучшить (img2img)</button>
-        <button type="button" class="btn sec" style="margin-top:0;flex:1;padding:9px" onclick="useSdResultAsInput('inpaint')">🖌 Маска</button>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px">
+        <button type="button" class="btn sec" style="margin-top:0;padding:9px 4px;font-size:12px" onclick="useSdResultAsInput('upscale')">🔍 4×</button>
+        <button type="button" class="btn sec" style="margin-top:0;padding:9px 4px;font-size:12px" onclick="useSdResultAsInput('img2img')">✏️ Фото</button>
+        <button type="button" class="btn sec" style="margin-top:0;padding:9px 4px;font-size:12px" onclick="useSdResultAsInput('inpaint')">🖌 Маска</button>
       </div>
     </div>
   </div>
@@ -671,9 +703,10 @@ function copyField(val, label) {
   showToast('Скопировано: ' + label);
 }
 
-/* ================= VOLT STUDIO (SD) ================= */
+/* ================= VOLT STUDIO (SD + REAL-ESRGAN) ================= */
 let sdMode = 'txt2img';
 let sdModelsData = [];
+let sdUpscalerReady = false;
 let sdHasInitImg = false;
 let sdDrawing = false;
 let sdLastResultUrl = '';
@@ -690,22 +723,68 @@ function toggleSdModelsPanel() {
 
 function setSdMode(m) {
   sdMode = m;
-  ['txt2img', 'img2img', 'inpaint'].forEach(k => {
+  ['txt2img', 'img2img', 'inpaint', 'upscale'].forEach(k => {
     document.getElementById('sdTab_' + k).classList.toggle('active', k === m);
   });
-  const editorCard = document.getElementById('sdImgEditorCard');
-  const brushCtrl = document.getElementById('sdBrushControls');
-  const clearBtn = document.getElementById('sdClearMaskBtn');
-  editorCard.style.display = (m === 'txt2img') ? 'none' : 'block';
-  brushCtrl.style.display = (m === 'inpaint') ? 'block' : 'none';
-  clearBtn.style.display = (m === 'inpaint') ? 'inline-block' : 'none';
+  const isUp = (m === 'upscale');
+  document.getElementById('sdModelCard').style.display = isUp ? 'none' : 'block';
+  document.getElementById('sdPromptCard').style.display = isUp ? 'none' : 'block';
+  document.getElementById('sdImgEditorCard').style.display = (m === 'txt2img') ? 'none' : 'block';
+  document.getElementById('sdStrengthRow').style.display = isUp ? 'none' : 'block';
+  document.getElementById('sdBrushControls').style.display = (m === 'inpaint') ? 'block' : 'none';
+  document.getElementById('sdClearMaskBtn').style.display = (m === 'inpaint') ? 'inline-block' : 'none';
   document.getElementById('sdMaskCanvas').style.pointerEvents = (m === 'inpaint') ? 'auto' : 'none';
+  document.getElementById('sdGenBtn').innerText = isUp ? '🔍 Увеличить в 4 раза' : '✨ Сгенерировать';
+  updateUpscalerUi();
 }
+
+function updateUpscalerUi() {
+  const toggleWrap = document.getElementById('upscalerToggleWrap');
+  const dlBox = document.getElementById('upscalerDownloadBox');
+  const hint = document.getElementById('upscalerHint');
+  if (sdUpscalerReady) {
+    dlBox.style.display = 'none';
+    toggleWrap.style.display = (sdMode === 'upscale') ? 'none' : 'block';
+    hint.innerText = (sdMode === 'upscale')
+      ? 'Готов: увеличивает выбранное фото в 4 раза с улучшением резкости'
+      : 'Авто-апскейл после генерации (320×320 → 1280×1280)';
+  } else {
+    toggleWrap.style.display = 'none';
+    dlBox.style.display = 'block';
+    hint.innerText = 'Скачай один раз (64 МБ) для авто-апскейла и вкладки 🔍 4×';
+  }
+}
+
+function startUpscalerDownload() {
+  const box = document.getElementById('upscalerDownloadBox');
+  box.innerHTML = '<div style="font-size:12px;color:var(--acc)" id="up-dl-txt">Загрузка Real-ESRGAN... 0%</div>' +
+    '<div class="prog-wrap"><div class="prog-fill" id="up-dl-fill"></div></div>';
+  VoltAndroid.downloadUpscaler();
+}
+window.onUpscalerProgress = (_, pct) => {
+  const t = document.getElementById('up-dl-txt');
+  const f = document.getElementById('up-dl-fill');
+  if (t) t.innerText = 'Загрузка Real-ESRGAN... ' + pct + '%';
+  if (f) f.style.width = pct + '%';
+};
+window.onUpscalerDone = () => {
+  sdUpscalerReady = true;
+  updateUpscalerUi();
+  showToast('Real-ESRGAN 4× готов!');
+};
+window.onUpscalerError = (err) => {
+  document.getElementById('upscalerDownloadBox').innerHTML =
+    '<div style="color:var(--warn);font-size:12px;margin-bottom:6px">Ошибка: ' + err + '</div>' +
+    '<button type="button" class="btn sec" style="margin-top:0;padding:8px" onclick="startUpscalerDownload()">Повторить загрузку</button>';
+};
 
 function refreshSdModels() {
   if (!window.VoltAndroid || !VoltAndroid.getSdModelsJson) return;
   const payload = JSON.parse(VoltAndroid.getSdModelsJson());
   sdModelsData = payload.models || [];
+  sdUpscalerReady = !!payload.upscaler_ready;
+  updateUpscalerUi();
+
   const sel = document.getElementById('sdModelSelect');
   const prevVal = sel.value;
   sel.innerHTML = '';
@@ -884,7 +963,30 @@ function exportBinaryMaskDataUrl() {
   return out.toDataURL('image/png');
 }
 
+function setSdBusyUi(busy, initialText) {
+  document.getElementById('sdProgressBox').style.display = busy ? 'block' : 'none';
+  if (busy) {
+    document.getElementById('sdProgFill').style.width = '4%';
+    document.getElementById('sdProgPct').innerText = '4%';
+    document.getElementById('sdProgText').innerText = initialText || 'Запуск...';
+  }
+  document.getElementById('sdGenBtn').disabled = busy;
+  document.getElementById('sdGenBtn').style.opacity = busy ? '0.5' : '1';
+  document.getElementById('sdStopBtn').style.display = busy ? 'block' : 'none';
+}
+
 function startSdGenerate() {
+  if (sdMode === 'upscale') {
+    if (!sdUpscalerReady) { showToast('Сначала скачай апскейлер Real-ESRGAN'); return; }
+    if (!sdHasInitImg) { showToast('Сначала выбери фото'); return; }
+    setSdBusyUi(true, 'Запуск Real-ESRGAN 4×...');
+    VoltAndroid.upscaleImage(JSON.stringify({
+      image: document.getElementById('sdBaseCanvas').toDataURL('image/png'),
+      threads: cfg.threads || 4
+    }));
+    return;
+  }
+
   const modelPath = document.getElementById('sdModelSelect').value;
   if (!modelPath) {
     showToast('Сначала скачай модель в «📦 Модели»');
@@ -899,6 +1001,7 @@ function startSdGenerate() {
   }
 
   const [w, h] = document.getElementById('sdSize').value.split('x').map(Number);
+  const autoUp = sdUpscalerReady && document.getElementById('sdAutoUpscale').checked;
   const payload = {
     modelPath: modelPath,
     mode: sdMode,
@@ -911,17 +1014,13 @@ function startSdGenerate() {
     strength: parseFloat(document.getElementById('sdStrength').value),
     seed: parseInt(document.getElementById('sdSeed').value || '-1'),
     threads: cfg.threads || 4,
+    quantType: document.getElementById('sdQuant').value || 'q8_0',
+    autoUpscale: autoUp,
     initImage: (sdMode !== 'txt2img' && sdHasInitImg) ? document.getElementById('sdBaseCanvas').toDataURL('image/png') : '',
     maskImage: (sdMode === 'inpaint' && sdHasInitImg) ? exportBinaryMaskDataUrl() : ''
   };
 
-  document.getElementById('sdProgressBox').style.display = 'block';
-  document.getElementById('sdProgFill').style.width = '4%';
-  document.getElementById('sdProgPct').innerText = '4%';
-  document.getElementById('sdProgText').innerText = 'Запуск движка...';
-  document.getElementById('sdGenBtn').disabled = true;
-  document.getElementById('sdGenBtn').style.opacity = '0.5';
-  document.getElementById('sdStopBtn').style.display = 'block';
+  setSdBusyUi(true, 'Запуск движка...');
   VoltAndroid.generateImage(JSON.stringify(payload));
 }
 
@@ -931,23 +1030,18 @@ window.onSdProgress = (pct, msg) => {
   document.getElementById('sdProgText').innerText = msg;
 };
 
-window.onSdDone = (dataUrl, savedPath, elapsedSec) => {
+window.onSdDone = (dataUrl, savedPath, elapsedSec, didUpscale) => {
   sdLastResultUrl = dataUrl;
-  document.getElementById('sdProgressBox').style.display = 'none';
-  document.getElementById('sdGenBtn').disabled = false;
-  document.getElementById('sdGenBtn').style.opacity = '1';
-  document.getElementById('sdStopBtn').style.display = 'none';
+  setSdBusyUi(false);
   document.getElementById('sdResImg').src = dataUrl;
-  document.getElementById('sdResMeta').innerText = 'Готово за ' + elapsedSec.toFixed(1) + ' с • Сохранено в Pictures/VoltStudio';
+  document.getElementById('sdResMeta').innerText =
+    'Готово за ' + elapsedSec.toFixed(1) + ' с' + (didUpscale ? ' • Апскейл 4×' : '') + ' • Pictures/VoltStudio';
   document.getElementById('sdResBox').classList.add('show');
   showToast('Сохранено в Галерею!');
 };
 
 window.onSdError = (err) => {
-  document.getElementById('sdProgressBox').style.display = 'none';
-  document.getElementById('sdGenBtn').disabled = false;
-  document.getElementById('sdGenBtn').style.opacity = '1';
-  document.getElementById('sdStopBtn').style.display = 'none';
+  setSdBusyUi(false);
   alert('Volt Студия: ' + err);
 };
 
@@ -955,7 +1049,7 @@ function useSdResultAsInput(targetMode) {
   if (!sdLastResultUrl) return;
   setSdMode(targetMode);
   loadImgToSdCanvas(sdLastResultUrl);
-  showToast('Фото загружено в редактор');
+  showToast(targetMode === 'upscale' ? 'Фото готово к апскейлу 4×' : 'Фото загружено в редактор');
 }
 
 /* ================= CHAT & AGENT ================= */

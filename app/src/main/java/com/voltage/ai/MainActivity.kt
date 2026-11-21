@@ -51,6 +51,8 @@ class MainActivity : AppCompatActivity() {
     companion object {
         init { System.loadLibrary("volt_jni") }
         const val CATALOG_URL = "https://raw.githubusercontent.com/lMrVoltl/volt-models/main/models.json"
+        const val UPSCALER_URL = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"
+        const val UPSCALER_FILE = "RealESRGAN_x4plus.pth"
     }
 
     private lateinit var webView: WebView
@@ -269,6 +271,8 @@ class MainActivity : AppCompatActivity() {
         return d
     }
 
+    private fun upscalerFile(): File = File(sdModelsDir(), UPSCALER_FILE)
+
     private fun studioOutputDir(): File {
         val pics = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
         val dir = File(pics, "VoltStudio")
@@ -299,8 +303,63 @@ class MainActivity : AppCompatActivity() {
         return appFile
     }
 
-    private fun resolveSdBinary(): File {
-        return File(applicationInfo.nativeLibraryDir, "libvolt_sd.so")
+    private fun resolveSdBinary(): File = File(applicationInfo.nativeLibraryDir, "libvolt_sd.so")
+
+    private fun runUpscaleProcess(inputFile: File, outputFile: File, threads: Int, basePct: Int): Pair<Boolean, String> {
+        val bin = resolveSdBinary()
+        val upModel = upscalerFile()
+        if (!bin.exists()) return Pair(false, "Движок libvolt_sd.so не найден")
+        if (!upModel.exists() || upModel.length() < 10_000_000L) {
+            return Pair(false, "Сначала скачай модель апскейлера Real-ESRGAN (64 МБ)")
+        }
+
+        val cmd = listOf(
+            bin.absolutePath,
+            "-M", "upscale",
+            "--upscale-model", upModel.absolutePath,
+            "-i", inputFile.absolutePath,
+            "-o", outputFile.absolutePath,
+            "-t", threads.toString()
+        )
+        runOnUiThread {
+            webView.evaluateJavascript("window.onSdProgress($basePct, 'Апскейл 4× (Real-ESRGAN)...')", null)
+        }
+        val proc = ProcessBuilder(cmd).directory(cacheDir).redirectErrorStream(true).start()
+        sdProcess = proc
+        val tail = ArrayDeque<String>()
+        val buf = ByteArrayOutputStream()
+        val stream = proc.inputStream
+        val pctRegex = Regex("(\\d+)%")
+        while (true) {
+            val b = stream.read()
+            if (b == -1) break
+            if (b == '\n'.code || b == '\r'.code) {
+                if (buf.size() > 0) {
+                    val line = buf.toString("UTF-8").trim()
+                    buf.reset()
+                    if (line.isNotEmpty()) {
+                        if (tail.size >= 10) tail.removeFirst()
+                        tail.addLast(line)
+                        val mp = pctRegex.find(line)
+                        if (mp != null) {
+                            val rawP = mp.groupValues[1].toIntOrNull() ?: 0
+                            val mapped = (basePct + ((rawP * (99 - basePct)) / 100)).coerceIn(basePct, 99)
+                            val msg = JSONObject.quote("Апскейл 4×: $rawP%...")
+                            runOnUiThread { webView.evaluateJavascript("window.onSdProgress($mapped, $msg)", null) }
+                        }
+                    }
+                }
+            } else {
+                buf.write(b)
+            }
+        }
+        val code = proc.waitFor()
+        sdProcess = null
+        return if (code == 0 && outputFile.exists() && outputFile.length() > 1000L) {
+            Pair(true, "")
+        } else {
+            Pair(false, tail.takeLast(4).joinToString("\n").ifBlank { "Ошибка апскейла (код $code)" })
+        }
     }
 
     private fun translitRuToEn(input: String): String {
@@ -314,9 +373,7 @@ class MainActivity : AppCompatActivity() {
             'э' to "e", 'ю' to "yu", 'я' to "ya"
         )
         val sb = StringBuilder()
-        for (ch in input.lowercase()) {
-            sb.append(map[ch] ?: ch)
-        }
+        for (ch in input.lowercase()) sb.append(map[ch] ?: ch)
         return sb.toString()
     }
 
@@ -407,9 +464,7 @@ class MainActivity : AppCompatActivity() {
                 val reqBuilder = Request.Builder()
                     .url(urlStr)
                     .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) VoltAI/3.0")
-                if (downloaded > 0L) {
-                    reqBuilder.header("Range", "bytes=$downloaded-")
-                }
+                if (downloaded > 0L) reqBuilder.header("Range", "bytes=$downloaded-")
 
                 dlClient.newCall(reqBuilder.build()).execute().use { resp ->
                     if (resp.code == 416) {
@@ -417,14 +472,10 @@ class MainActivity : AppCompatActivity() {
                         tmp.renameTo(target)
                         return
                     }
-                    if (!resp.isSuccessful && resp.code != 206) {
-                        throw Exception("HTTP ${resp.code}")
-                    }
+                    if (!resp.isSuccessful && resp.code != 206) throw Exception("HTTP ${resp.code}")
 
                     val appendMode = (resp.code == 206 && downloaded > 0L)
-                    if (!appendMode) {
-                        downloaded = 0L
-                    }
+                    if (!appendMode) downloaded = 0L
                     val contentLen = resp.body?.contentLength() ?: -1L
                     val total = if (contentLen > 0L) downloaded + contentLen else -1L
                     val input = resp.body?.byteStream() ?: throw Exception("Пустой поток")
@@ -448,22 +499,15 @@ class MainActivity : AppCompatActivity() {
                         }
                         output.flush()
                     }
-
-                    if (total > 0L && downloaded < total) {
-                        throw Exception("Неполная загрузка: $downloaded / $total")
-                    }
+                    if (total > 0L && downloaded < total) throw Exception("Неполная загрузка: $downloaded / $total")
                 }
 
                 if (target.exists()) target.delete()
                 tmp.renameTo(target)
                 return
             } catch (e: Exception) {
-                if (e.message?.contains("HTTP 404") == true || e.message?.contains("HTTP 403") == true) {
-                    throw e
-                }
-                if (attempt >= maxAttempts) {
-                    throw e
-                }
+                if (e.message?.contains("HTTP 404") == true || e.message?.contains("HTTP 403") == true) throw e
+                if (attempt >= maxAttempts) throw e
                 try { Thread.sleep(1500L) } catch (_: Exception) {}
             }
         }
@@ -511,9 +555,7 @@ class MainActivity : AppCompatActivity() {
     private fun initVoltTts() {
         if (ttsEngine == null) {
             ttsEngine = TextToSpeech(this) { status ->
-                if (status == TextToSpeech.SUCCESS) {
-                    ttsEngine?.language = Locale("ru", "RU")
-                }
+                if (status == TextToSpeech.SUCCESS) ttsEngine?.language = Locale("ru", "RU")
             }
         }
     }
@@ -879,7 +921,7 @@ class MainActivity : AppCompatActivity() {
             val supported = JSONArray().apply {
                 put(JSONObject().put("tier", "Volt Ion v2.5 • 1.5B Fast").put("quant", "Qwen 2.5 1.5B • Текст и файлы").put("status", "Максимальная скорость"))
                 put(JSONObject().put("tier", "Volt Neutron v2.6 • 3B Vision").put("quant", "Qwen2.5-VL 3B • Фото + текст").put("status", "Оптимум"))
-                put(JSONObject().put("tier", "Volt Studio • SD-Turbo / SD 1.5").put("quant", "stable-diffusion.cpp • Локально без цензуры").put("status", "txt2img / img2img / inpaint"))
+                put(JSONObject().put("tier", "Volt Studio • SD + Real-ESRGAN 4×").put("quant", "stable-diffusion.cpp (KleidiAI + q8_0)").put("status", "txt2img / img2img / inpaint / 4x"))
                 if (totalGb >= 7.5) {
                     put(JSONObject().put("tier", "Volt Plasma v3.0 • 8B").put("quant", "Qwen 3 8B Q4_K_M").put("status", if (hasDotProd) "Флагман (DotProd)" else "Флагман"))
                 }
@@ -905,17 +947,19 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // === VOLT STUDIO (STABLE DIFFUSION LOCAL ENGINE) ===
+        // === VOLT STUDIO (STABLE DIFFUSION + REAL-ESRGAN 4X) ===
         @JavascriptInterface
         fun getSdModelsJson(): String {
             val sdDir = sdModelsDir()
             val binOk = resolveSdBinary().exists()
+            val upReady = upscalerFile().exists() && upscalerFile().length() > 10_000_000L
+
             val builtIns = listOf(
                 mapOf(
                     "id" to "sd-turbo",
                     "file" to "sd-turbo.safetensors",
                     "name" to "SD-Turbo (Быстрая)",
-                    "desc" to "4 шага, CFG 1.0 • Генерация за ~25-45 сек на CPU, без цензуры",
+                    "desc" to "4 шага, CFG 1.0 • Максимальная скорость на CPU + отлично с апскейлом 4×",
                     "size_mb" to 1710,
                     "steps" to 4,
                     "cfg" to 1.0,
@@ -925,9 +969,9 @@ class MainActivity : AppCompatActivity() {
                     "id" to "dreamshaper-8",
                     "file" to "dreamshaper-8.safetensors",
                     "name" to "DreamShaper 8 (Без цензуры)",
-                    "desc" to "15 шагов, CFG 7.0 • Реализм, арт, улучшение фото и маска (inpainting)",
+                    "desc" to "10 шагов, CFG 7.0 • Реализм, арт, улучшение фото и маска (inpainting)",
                     "size_mb" to 2130,
-                    "steps" to 15,
+                    "steps" to 10,
                     "cfg" to 7.0,
                     "url" to "https://huggingface.co/Lykon/DreamShaper/resolve/main/DreamShaper_8_pruned.safetensors"
                 )
@@ -935,6 +979,7 @@ class MainActivity : AppCompatActivity() {
 
             val arr = JSONArray()
             val knownFiles = HashSet<String>()
+            knownFiles.add(UPSCALER_FILE)
             for (b in builtIns) {
                 val fname = b["file"] as String
                 knownFiles.add(fname)
@@ -962,7 +1007,7 @@ class MainActivity : AppCompatActivity() {
                     .put("name", f.nameWithoutExtension)
                     .put("desc", "Локальный чекпоинт (${f.extension.uppercase()}) • ${f.length() / (1024 * 1024)} МБ")
                     .put("size_mb", f.length() / (1024 * 1024))
-                    .put("default_steps", 15)
+                    .put("default_steps", 10)
                     .put("default_cfg", 7.0)
                     .put("url", "")
                     .put("path", f.absolutePath)
@@ -972,16 +1017,29 @@ class MainActivity : AppCompatActivity() {
 
             return JSONObject()
                 .put("engine_ready", binOk)
+                .put("upscaler_ready", upReady)
                 .put("models", arr)
                 .toString()
+        }
+
+        @JavascriptInterface
+        fun downloadUpscaler() {
+            thread {
+                try {
+                    downloadSingleFile(UPSCALER_URL, upscalerFile(), 0, 100, "upscaler", "window.onUpscalerProgress")
+                    runOnUiThread { webView.evaluateJavascript("window.onUpscalerDone()", null) }
+                } catch (e: Exception) {
+                    val err = JSONObject.quote(e.message ?: "Ошибка загрузки Real-ESRGAN")
+                    runOnUiThread { webView.evaluateJavascript("window.onUpscalerError($err)", null) }
+                }
+            }
         }
 
         @JavascriptInterface
         fun downloadSdModel(id: String, urlStr: String) {
             thread {
                 try {
-                    val fileName = "$id.safetensors"
-                    val target = File(sdModelsDir(), fileName)
+                    val target = File(sdModelsDir(), "$id.safetensors")
                     downloadSingleFile(urlStr, target, 0, 100, id, "window.onSdDownloadProgress")
                     runOnUiThread { webView.evaluateJavascript("window.onSdDownloadDone('$id')", null) }
                 } catch (e: Exception) {
@@ -1003,9 +1061,7 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun importSdModelFile() {
-            runOnUiThread {
-                sdModelPickerLauncher.launch(arrayOf("*/*"))
-            }
+            runOnUiThread { sdModelPickerLauncher.launch(arrayOf("*/*")) }
         }
 
         @JavascriptInterface
@@ -1013,6 +1069,57 @@ class MainActivity : AppCompatActivity() {
             sdStoppedByUser = true
             try { sdProcess?.destroyForcibly() } catch (_: Exception) {}
             sdProcess = null
+        }
+
+        @JavascriptInterface
+        fun upscaleImage(paramsJson: String) {
+            thread(name = "VoltUpscaleWorker") {
+                sdStoppedByUser = false
+                val tStart = System.currentTimeMillis()
+                try {
+                    val p = JSONObject(paramsJson)
+                    val imgB64 = p.optString("image", "")
+                    val threads = p.optInt("threads", 4).coerceIn(1, 6)
+                    if (imgB64.isEmpty()) {
+                        runOnUiThread { webView.evaluateJavascript("window.onSdError('Выбери фото для апскейла')", null) }
+                        return@thread
+                    }
+                    val inFile = File(cacheDir, "sd_up_in_${System.currentTimeMillis()}.png")
+                    val outFile = File(cacheDir, "sd_up_out_${System.currentTimeMillis()}.png")
+                    if (!saveBase64PngToFile(imgB64, inFile)) {
+                        runOnUiThread { webView.evaluateJavascript("window.onSdError('Не удалось прочитать изображение')", null) }
+                        return@thread
+                    }
+
+                    val (ok, errMsg) = runUpscaleProcess(inFile, outFile, threads, 10)
+                    inFile.delete()
+
+                    if (sdStoppedByUser) {
+                        outFile.delete()
+                        runOnUiThread { webView.evaluateJavascript("window.onSdError('Апскейл остановлен')", null) }
+                        return@thread
+                    }
+
+                    if (ok) {
+                        val savedFile = File(studioOutputDir(), "Volt_Up4x_${System.currentTimeMillis()}.png")
+                        outFile.copyTo(savedFile, overwrite = true)
+                        MediaScannerConnection.scanFile(this@MainActivity, arrayOf(savedFile.absolutePath), arrayOf("image/png"), null)
+                        val dataUrl = "data:image/png;base64," + Base64.encodeToString(outFile.readBytes(), Base64.NO_WRAP)
+                        outFile.delete()
+                        val elapsed = (System.currentTimeMillis() - tStart) / 1000.0
+                        val qUrl = JSONObject.quote(dataUrl)
+                        val qPath = JSONObject.quote(savedFile.absolutePath)
+                        runOnUiThread { webView.evaluateJavascript("window.onSdDone($qUrl, $qPath, $elapsed, true)", null) }
+                    } else {
+                        outFile.delete()
+                        val qErr = JSONObject.quote(errMsg)
+                        runOnUiThread { webView.evaluateJavascript("window.onSdError($qErr)", null) }
+                    }
+                } catch (e: Exception) {
+                    val qErr = JSONObject.quote(e.message ?: "Ошибка апскейла")
+                    runOnUiThread { webView.evaluateJavascript("window.onSdError($qErr)", null) }
+                }
+            }
         }
 
         @JavascriptInterface
@@ -1040,13 +1147,15 @@ class MainActivity : AppCompatActivity() {
                     val mode = p.optString("mode", "txt2img")
                     val prompt = p.optString("prompt", "").trim()
                     val negPrompt = p.optString("negPrompt", "").trim()
-                    val width = (p.optInt("width", 512) / 64) * 64
-                    val height = (p.optInt("height", 512) / 64) * 64
+                    val width = maxOf(256, (p.optInt("width", 320) / 64) * 64)
+                    val height = maxOf(256, (p.optInt("height", 320) / 64) * 64)
                     val steps = p.optInt("steps", 8).coerceIn(1, 40)
                     val cfgScale = p.optDouble("cfgScale", 1.0).coerceIn(0.5, 15.0)
-                    val strength = p.optDouble("strength", 0.65).coerceIn(0.1, 0.99)
+                    val strength = p.optDouble("strength", 0.55).coerceIn(0.1, 0.99)
                     val seed = p.optLong("seed", -1L)
                     val threads = p.optInt("threads", 4).coerceIn(1, 6)
+                    val quantType = p.optString("quantType", "q8_0")
+                    val autoUpscale = p.optBoolean("autoUpscale", false)
                     val initB64 = p.optString("initImage", "")
                     val maskB64 = p.optString("maskImage", "")
 
@@ -1063,8 +1172,13 @@ class MainActivity : AppCompatActivity() {
                         "-t", threads.toString(),
                         "-s", seed.toString(),
                         "--vae-tiling",
+                        "--diffusion-fa",
                         "-o", outFile.absolutePath
                     )
+                    if (quantType == "q8_0" || quantType == "q4_0" || quantType == "f16") {
+                        cmd.add("--type")
+                        cmd.add(quantType)
+                    }
                     if (negPrompt.isNotEmpty()) {
                         cmd.add("-n")
                         cmd.add(negPrompt)
@@ -1088,20 +1202,18 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     runOnUiThread {
-                        webView.evaluateJavascript("window.onSdProgress(5, 'Загрузка весов модели в RAM...')", null)
+                        webView.evaluateJavascript("window.onSdProgress(4, 'Загрузка весов ($quantType)...')", null)
                     }
 
-                    val pb = ProcessBuilder(cmd)
-                        .directory(cacheDir)
-                        .redirectErrorStream(true)
+                    val pb = ProcessBuilder(cmd).directory(cacheDir).redirectErrorStream(true)
                     val proc = pb.start()
                     sdProcess = proc
 
                     val logTail = ArrayDeque<String>()
                     val stepRegex = Regex("(\\d+)\\s*/\\s*(\\d+)")
-                    val pctRegex = Regex("(\\d+)%")
                     val lineBuf = ByteArrayOutputStream()
                     val stream = proc.inputStream
+                    val maxGenPct = if (autoUpscale) 84 else 94
 
                     while (true) {
                         val b = stream.read()
@@ -1115,24 +1227,25 @@ class MainActivity : AppCompatActivity() {
                                     logTail.addLast(line)
 
                                     val mStep = stepRegex.find(line)
-                                    val mPct = pctRegex.find(line)
                                     when {
-                                        mStep != null && (line.contains("|") || line.contains("step", true) || line.contains("it/s", true) || line.contains("s/it", true)) -> {
+                                        mStep != null && (line.contains("|") || line.contains("it/s", true) || line.contains("s/it", true)) -> {
                                             val cur = mStep.groupValues[1].toIntOrNull() ?: 0
-                                            val tot = mStep.groupValues[2].toIntOrNull() ?: steps
-                                            if (tot > 0 && cur <= tot) {
-                                                val pct = 15 + ((cur * 78) / tot)
-                                                val msg = JSONObject.quote("Шаг $cur / $tot...")
+                                            val tot = mStep.groupValues[2].toIntOrNull() ?: 0
+                                            if (tot > 45 && cur <= tot) {
+                                                // Загрузка тензоров модели (например 686/686) -> 5%..18%
+                                                val pct = 5 + ((cur * 13) / tot)
+                                                val msg = JSONObject.quote("Загрузка весов: $cur / $tot...")
+                                                runOnUiThread { webView.evaluateJavascript("window.onSdProgress($pct, $msg)", null) }
+                                            } else if (tot in 1..45 && cur <= tot) {
+                                                // Реальные шаги генерации -> 20%..maxGenPct
+                                                val pct = 20 + ((cur * (maxGenPct - 20)) / tot)
+                                                val msg = JSONObject.quote("Генерация: шаг $cur / $tot...")
                                                 runOnUiThread { webView.evaluateJavascript("window.onSdProgress($pct, $msg)", null) }
                                             }
                                         }
-                                        mPct != null -> {
-                                            val pct = (mPct.groupValues[1].toIntOrNull() ?: 10).coerceIn(10, 95)
-                                            val msg = JSONObject.quote("Генерация: $pct%...")
-                                            runOnUiThread { webView.evaluateJavascript("window.onSdProgress($pct, $msg)", null) }
-                                        }
-                                        line.contains("decoding", true) || line.contains("vae", true) -> {
-                                            runOnUiThread { webView.evaluateJavascript("window.onSdProgress(94, 'Декодирование VAE...')", null) }
+                                        line.contains("decoding", true) || line.contains("decode_first_stage", true) -> {
+                                            val vaePct = if (autoUpscale) 86 else 95
+                                            runOnUiThread { webView.evaluateJavascript("window.onSdProgress($vaePct, 'Декодирование VAE...')", null) }
                                         }
                                     }
                                 }
@@ -1146,24 +1259,46 @@ class MainActivity : AppCompatActivity() {
                     sdProcess = null
 
                     if (sdStoppedByUser) {
+                        outFile.delete()
                         runOnUiThread { webView.evaluateJavascript("window.onSdError('Генерация остановлена')", null) }
                         return@thread
                     }
 
                     if (exitCode == 0 && outFile.exists() && outFile.length() > 1000L) {
+                        var finalFile = outFile
+                        var didUpscale = false
+
+                        if (autoUpscale && upscalerFile().exists() && upscalerFile().length() > 10_000_000L) {
+                            val upOut = File(cacheDir, "sd_up_${System.currentTimeMillis()}.png")
+                            val (upOk, _) = runUpscaleProcess(outFile, upOut, threads, 88)
+                            if (upOk) {
+                                outFile.delete()
+                                finalFile = upOut
+                                didUpscale = true
+                            } else {
+                                upOut.delete()
+                            }
+                        }
+
+                        if (sdStoppedByUser) {
+                            finalFile.delete()
+                            runOnUiThread { webView.evaluateJavascript("window.onSdError('Остановлено пользователем')", null) }
+                            return@thread
+                        }
+
                         val savedFile = File(studioOutputDir(), "Volt_${System.currentTimeMillis()}.png")
-                        outFile.copyTo(savedFile, overwrite = true)
+                        finalFile.copyTo(savedFile, overwrite = true)
                         MediaScannerConnection.scanFile(this@MainActivity, arrayOf(savedFile.absolutePath), arrayOf("image/png"), null)
 
-                        val pngBytes = outFile.readBytes()
+                        val pngBytes = finalFile.readBytes()
                         val dataUrl = "data:image/png;base64," + Base64.encodeToString(pngBytes, Base64.NO_WRAP)
-                        outFile.delete()
+                        finalFile.delete()
 
                         val elapsed = (System.currentTimeMillis() - tStart) / 1000.0
                         val qUrl = JSONObject.quote(dataUrl)
                         val qPath = JSONObject.quote(savedFile.absolutePath)
                         runOnUiThread {
-                            webView.evaluateJavascript("window.onSdDone($qUrl, $qPath, $elapsed)", null)
+                            webView.evaluateJavascript("window.onSdDone($qUrl, $qPath, $elapsed, $didUpscale)", null)
                         }
                     } else {
                         val errTxt = logTail.takeLast(4).joinToString("\n").ifBlank { "Код выхода: $exitCode" }
@@ -1186,9 +1321,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
-        fun stopSpeaking() {
-            ttsEngine?.stop()
-        }
+        fun stopSpeaking() { ttsEngine?.stop() }
 
         @JavascriptInterface
         fun getLastTtftMs(): Long {
@@ -1394,14 +1527,10 @@ class MainActivity : AppCompatActivity() {
                     val netArr = netObj.getJSONArray("models")
                     val fbArr = JSONObject(getFallbackCatalogJson()).getJSONArray("models")
                     val existingIds = HashSet<String>()
-                    for (i in 0 until netArr.length()) {
-                        existingIds.add(netArr.getJSONObject(i).getString("id"))
-                    }
+                    for (i in 0 until netArr.length()) existingIds.add(netArr.getJSONObject(i).getString("id"))
                     for (i in 0 until fbArr.length()) {
                         val fbItem = fbArr.getJSONObject(i)
-                        if (!existingIds.contains(fbItem.getString("id"))) {
-                            netArr.put(fbItem)
-                        }
+                        if (!existingIds.contains(fbItem.getString("id"))) netArr.put(fbItem)
                     }
                     val mergedStr = netObj.toString()
                     cacheFile.writeText(mergedStr)
@@ -1485,10 +1614,7 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun openExternalUrl(url: String) {
             runOnUiThread {
-                try {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                    startActivity(intent)
-                } catch (_: Exception) {}
+                try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } catch (_: Exception) {}
             }
         }
 
@@ -1543,9 +1669,7 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun pickCustomModelFile() {
-            runOnUiThread {
-                customModelPickerLauncher.launch(arrayOf("*/*"))
-            }
+            runOnUiThread { customModelPickerLauncher.launch(arrayOf("*/*")) }
         }
 
         @JavascriptInterface
@@ -1615,14 +1739,8 @@ class MainActivity : AppCompatActivity() {
                         else if (VoltAgentService.scrollUp()) "Экран прокручен вверх"
                         else "Не удалось прокрутить вверх"
                     }
-                    "back" -> {
-                        VoltAgentService.goBack()
-                        "Выполнено: Назад"
-                    }
-                    "home" -> {
-                        VoltAgentService.goHome()
-                        "Переход на главный экран"
-                    }
+                    "back" -> { VoltAgentService.goBack(); "Выполнено: Назад" }
+                    "home" -> { VoltAgentService.goHome(); "Переход на главный экран" }
                     "open_app" -> {
                         val match = findBestMatchingApp(target)
                         if (match != null) {
@@ -1631,12 +1749,8 @@ class MainActivity : AppCompatActivity() {
                                 launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                 startActivity(launch)
                                 "Открыто приложение: ${match.first}"
-                            } else {
-                                "Не удалось запустить: ${match.first}"
-                            }
-                        } else {
-                            "Приложение «$target» не найдено среди установленных"
-                        }
+                            } else "Не удалось запустить: ${match.first}"
+                        } else "Приложение «$target» не найдено среди установленных"
                     }
                     "set_alarm" -> {
                         val parts = target.split(":")

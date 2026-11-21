@@ -72,7 +72,7 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-34 build-tools;34.0.0 ndk;26.3.11579264 cmake;3.22.1'
 
-      - name: Build stable-diffusion.cpp (arm64-v8a)
+      - name: Build stable-diffusion.cpp (arm64-v8a + KleidiAI)
         run: |
           NDK_HOME="$ANDROID_HOME/ndk/26.3.11579264"
           git clone --recursive --depth 1 https://github.com/leejet/stable-diffusion.cpp.git /tmp/sd.cpp
@@ -86,6 +86,7 @@ jobs:
             -DSD_BUILD_SHARED_LIBS=OFF \
             -DGGML_OPENMP=OFF \
             -DGGML_NATIVE=OFF \
+            -DGGML_CPU_KLEIDIAI=ON \
             -DSD_BUILD_EXAMPLES=ON
           cmake --build /tmp/sd-build -j$(nproc)
           SD_BIN=$(find /tmp/sd-build -type f \( -name "sd-cli" -o -name "sd" \) -executable | head -n 1)
@@ -110,4 +111,4 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk VoltAI.apk
           unzip -tq VoltAI.apk
           gh release delete app-latest -y || true
-          gh release create app-latest VoltAI.apk --title "Volt AI APK" --notes "Автосборка Volt AI (LLM + Stable Diffusion Studio)"
+          gh release create app-latest VoltAI.apk --title "Volt AI APK" --notes "Автосборка Volt AI (LLM + Accelerated SD Studio + Real-ESRGAN 4x)"
