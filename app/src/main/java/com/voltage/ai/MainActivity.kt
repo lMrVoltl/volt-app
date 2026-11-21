@@ -31,10 +31,11 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.io.InputStreamReader
+import java.io.InputStream
+import java.io.OutputStream
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
@@ -61,6 +62,10 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var isApiServerRunning = false
     @Volatile private var apiStreamBuffer = StringBuilder()
     @Volatile private var apiGenerationLatch: CountDownLatch? = null
+    @Volatile private var activeSseOut: OutputStream? = null
+    @Volatile private var activeSseId: String = ""
+    @Volatile private var activeSseModel: String = "volt-local"
+    @Volatile private var activeSseCreated: Long = 0L
     private var ttsEngine: TextToSpeech? = null
     @Volatile private var promptStartTimeMs: Long = 0L
     @Volatile private var firstTokenTimeMs: Long = 0L
@@ -409,6 +414,27 @@ class MainActivity : AppCompatActivity() {
         if (firstTokenTimeMs == 0L) firstTokenTimeMs = System.currentTimeMillis()
         if (apiGenerationLatch != null) {
             apiStreamBuffer.append(token)
+            val sseOut = activeSseOut
+            if (sseOut != null) {
+                try {
+                    val chunk = JSONObject().apply {
+                        put("id", activeSseId)
+                        put("object", "chat.completion.chunk")
+                        put("created", activeSseCreated)
+                        put("model", activeSseModel)
+                        put("choices", JSONArray().put(JSONObject().apply {
+                            put("index", 0)
+                            put("delta", JSONObject().put("content", token))
+                            put("finish_reason", JSONObject.NULL)
+                        }))
+                    }.toString()
+                    sseOut.write("data: $chunk\n\n".toByteArray(Charsets.UTF_8))
+                    sseOut.flush()
+                } catch (_: Exception) {
+                    activeSseOut = null
+                    nativeStop()
+                }
+            }
             return
         }
         val escaped = JSONObject.quote(token)
@@ -476,6 +502,57 @@ class MainActivity : AppCompatActivity() {
         return contentAny.toString()
     }
 
+    private fun readHttpHeaderBytes(inp: InputStream): ByteArray {
+        val baos = ByteArrayOutputStream()
+        var state = 0
+        while (true) {
+            val b = inp.read()
+            if (b == -1) break
+            baos.write(b)
+            state = when {
+                state == 0 && b == '\r'.code -> 1
+                state == 1 && b == '\n'.code -> 2
+                state == 2 && b == '\r'.code -> 3
+                state == 3 && b == '\n'.code -> return baos.toByteArray()
+                b == '\r'.code -> 1
+                else -> 0
+            }
+            if (baos.size() > 65536) break
+        }
+        return baos.toByteArray()
+    }
+
+    private fun readExactBytes(inp: InputStream, len: Int): ByteArray {
+        val buf = ByteArray(len)
+        var readTotal = 0
+        while (readTotal < len) {
+            val r = inp.read(buf, readTotal, len - readTotal)
+            if (r <= 0) break
+            readTotal += r
+        }
+        return if (readTotal == len) buf else buf.copyOf(readTotal)
+    }
+
+    private fun readChunkedBytes(inp: InputStream): ByteArray {
+        val out = ByteArrayOutputStream()
+        while (true) {
+            val lineBaos = ByteArrayOutputStream()
+            while (true) {
+                val b = inp.read()
+                if (b == -1 || b == '\n'.code) break
+                if (b != '\r'.code) lineBaos.write(b)
+            }
+            val sizeStr = lineBaos.toString("UTF-8").trim().substringBefore(";")
+            if (sizeStr.isEmpty()) break
+            val chunkSize = sizeStr.toIntOrNull(16) ?: break
+            if (chunkSize <= 0) break
+            out.write(readExactBytes(inp, chunkSize))
+            inp.read()
+            inp.read()
+        }
+        return out.toByteArray()
+    }
+
     private fun writeHttpJson(socket: Socket, status: String, json: String) {
         val bodyBytes = json.toByteArray(Charsets.UTF_8)
         val headers = "HTTP/1.1 $status\r\n" +
@@ -494,26 +571,32 @@ class MainActivity : AppCompatActivity() {
     private fun handleOpenAiClient(socket: Socket) {
         try {
             socket.soTimeout = 180000
-            val reader = BufferedReader(InputStreamReader(socket.getInputStream(), Charsets.UTF_8))
-            val requestLine = reader.readLine() ?: return
+            val inp = socket.getInputStream()
+            val headerBytes = readHttpHeaderBytes(inp)
+            if (headerBytes.isEmpty()) return
+
+            val headerLines = String(headerBytes, Charsets.UTF_8).split("\r\n")
+            val requestLine = headerLines.firstOrNull()?.trim().orEmpty()
+            if (requestLine.isEmpty()) return
+
             var contentLength = 0
-            var line: String?
-            while (reader.readLine().also { line = it } != null && line!!.isNotEmpty()) {
-                if (line!!.lowercase().startsWith("content-length:")) {
-                    contentLength = line!!.substringAfter(":").trim().toIntOrNull() ?: 0
+            var isChunked = false
+            for (i in 1 until headerLines.size) {
+                val h = headerLines[i]
+                val hl = h.lowercase()
+                if (hl.startsWith("content-length:")) {
+                    contentLength = h.substringAfter(":").trim().toIntOrNull() ?: 0
+                } else if (hl.startsWith("transfer-encoding:") && hl.contains("chunked")) {
+                    isChunked = true
                 }
             }
-            var body = ""
-            if (contentLength > 0) {
-                val buf = CharArray(contentLength)
-                var readTotal = 0
-                while (readTotal < contentLength) {
-                    val r = reader.read(buf, readTotal, contentLength - readTotal)
-                    if (r <= 0) break
-                    readTotal += r
-                }
-                body = String(buf, 0, readTotal)
+
+            val bodyBytes = when {
+                isChunked -> readChunkedBytes(inp)
+                contentLength > 0 -> readExactBytes(inp, contentLength)
+                else -> ByteArray(0)
             }
+            val body = String(bodyBytes, Charsets.UTF_8)
 
             if (requestLine.startsWith("OPTIONS ")) {
                 val headers = "HTTP/1.1 204 No Content\r\n" +
@@ -561,24 +644,26 @@ class MainActivity : AppCompatActivity() {
                     else chatSb.append("<|im_start|>").append(role).append("\n").append(content).append("<|im_end|>\n")
                 }
 
-                val replyText = if (!isModelLoaded) {
-                    "Volt AI подключён, но нейросеть ещё не загружена в RAM. Открой Volt AI и выбери модель сверху."
-                } else {
-                    synchronized(this) {
-                        apiStreamBuffer = StringBuilder()
-                        val latch = CountDownLatch(1)
-                        apiGenerationLatch = latch
-                        promptStartTimeMs = System.currentTimeMillis()
-                        firstTokenTimeMs = 0L
-                        nativeGenerate(chatSb.toString(), sysPrompt, null, 0, 0, temp, topP, maxTok)
-                        apiGenerationLatch?.countDown()
-                        apiGenerationLatch = null
-                    }
-                    apiStreamBuffer.toString().trim().ifEmpty { "Готово." }
-                }
-
                 val nowSec = System.currentTimeMillis() / 1000
                 val compId = "chatcmpl-volt-${System.currentTimeMillis()}"
+
+                if (!isModelLoaded) {
+                    val errText = "Volt AI подключён, но модель ещё не загружена в RAM. Открой Volt AI и выбери модель сверху."
+                    if (isStream) {
+                        val out = socket.getOutputStream()
+                        val sseHeaders = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream; charset=utf-8\r\nCache-Control: no-cache\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
+                        out.write(sseHeaders.toByteArray(Charsets.UTF_8))
+                        val c1 = JSONObject().put("id", compId).put("object", "chat.completion.chunk").put("created", nowSec).put("model", reqModel)
+                            .put("choices", JSONArray().put(JSONObject().put("index", 0).put("delta", JSONObject().put("role", "assistant").put("content", errText)).put("finish_reason", "stop"))).toString()
+                        out.write("data: $c1\n\ndata: [DONE]\n\n".toByteArray(Charsets.UTF_8))
+                        out.flush()
+                    } else {
+                        val respStr = JSONObject().put("id", compId).put("object", "chat.completion").put("created", nowSec).put("model", reqModel)
+                            .put("choices", JSONArray().put(JSONObject().put("index", 0).put("message", JSONObject().put("role", "assistant").put("content", errText)).put("finish_reason", "stop"))).toString()
+                        writeHttpJson(socket, "200 OK", respStr)
+                    }
+                    return
+                }
 
                 if (isStream) {
                     val out = socket.getOutputStream()
@@ -588,37 +673,68 @@ class MainActivity : AppCompatActivity() {
                         "Access-Control-Allow-Origin: *\r\n" +
                         "Connection: close\r\n\r\n"
                     out.write(sseHeaders.toByteArray(Charsets.UTF_8))
-
-                    val chunk1 = JSONObject().apply {
+                    val roleChunk = JSONObject().apply {
                         put("id", compId)
                         put("object", "chat.completion.chunk")
                         put("created", nowSec)
                         put("model", reqModel)
                         put("choices", JSONArray().put(JSONObject().apply {
                             put("index", 0)
-                            put("delta", JSONObject().apply {
-                                put("role", "assistant")
-                                put("content", replyText)
-                            })
+                            put("delta", JSONObject().put("role", "assistant"))
                             put("finish_reason", JSONObject.NULL)
                         }))
                     }.toString()
-
-                    val chunk2 = JSONObject().apply {
-                        put("id", compId)
-                        put("object", "chat.completion.chunk")
-                        put("created", nowSec)
-                        put("model", reqModel)
-                        put("choices", JSONArray().put(JSONObject().apply {
-                            put("index", 0)
-                            put("delta", JSONObject())
-                            put("finish_reason", "stop")
-                        }))
-                    }.toString()
-
-                    out.write("data: $chunk1\n\ndata: $chunk2\n\ndata: [DONE]\n\n".toByteArray(Charsets.UTF_8))
+                    out.write("data: $roleChunk\n\n".toByteArray(Charsets.UTF_8))
                     out.flush()
+
+                    synchronized(this) {
+                        apiStreamBuffer = StringBuilder()
+                        apiGenerationLatch = CountDownLatch(1)
+                        activeSseId = compId
+                        activeSseModel = reqModel
+                        activeSseCreated = nowSec
+                        activeSseOut = out
+                        promptStartTimeMs = System.currentTimeMillis()
+                        firstTokenTimeMs = 0L
+                        try {
+                            nativeGenerate(chatSb.toString(), sysPrompt, null, 0, 0, temp, topP, maxTok)
+                        } finally {
+                            activeSseOut = null
+                            apiGenerationLatch?.countDown()
+                            apiGenerationLatch = null
+                        }
+                    }
+
+                    try {
+                        val endChunk = JSONObject().apply {
+                            put("id", compId)
+                            put("object", "chat.completion.chunk")
+                            put("created", nowSec)
+                            put("model", reqModel)
+                            put("choices", JSONArray().put(JSONObject().apply {
+                                put("index", 0)
+                                put("delta", JSONObject())
+                                put("finish_reason", "stop")
+                            }))
+                        }.toString()
+                        out.write("data: $endChunk\n\ndata: [DONE]\n\n".toByteArray(Charsets.UTF_8))
+                        out.flush()
+                    } catch (_: Exception) {}
                 } else {
+                    synchronized(this) {
+                        apiStreamBuffer = StringBuilder()
+                        apiGenerationLatch = CountDownLatch(1)
+                        activeSseOut = null
+                        promptStartTimeMs = System.currentTimeMillis()
+                        firstTokenTimeMs = 0L
+                        try {
+                            nativeGenerate(chatSb.toString(), sysPrompt, null, 0, 0, temp, topP, maxTok)
+                        } finally {
+                            apiGenerationLatch?.countDown()
+                            apiGenerationLatch = null
+                        }
+                    }
+                    val replyText = apiStreamBuffer.toString().trim().ifEmpty { "Готово." }
                     val respStr = JSONObject().apply {
                         put("id", compId)
                         put("object", "chat.completion")
