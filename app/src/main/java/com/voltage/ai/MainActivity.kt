@@ -305,12 +305,92 @@ class MainActivity : AppCompatActivity() {
 
     private fun resolveSdBinary(): File = File(applicationInfo.nativeLibraryDir, "libvolt_sd.so")
 
-    private fun runUpscaleProcess(inputFile: File, outputFile: File, threads: Int, basePct: Int): Pair<Boolean, String> {
+    private fun configureSdEnv(pb: ProcessBuilder, useGpu: Boolean) {
+        if (!useGpu) {
+            pb.environment()["GGML_VK_VISIBLE_DEVICES"] = ""
+        }
+    }
+
+    private fun runSdOnce(
+        cmd: List<String>,
+        useGpu: Boolean,
+        maxGenPct: Int,
+        quantType: String
+    ): Triple<Boolean, Boolean, String> {
+        val modeTag = if (useGpu) "Vulkan GPU" else "CPU"
+        runOnUiThread {
+            webView.evaluateJavascript("window.onSdProgress(4, 'Загрузка весов ($modeTag • $quantType)...')", null)
+        }
+        val pb = ProcessBuilder(cmd).directory(cacheDir).redirectErrorStream(true)
+        configureSdEnv(pb, useGpu)
+        val proc = pb.start()
+        sdProcess = proc
+
+        val logTail = ArrayDeque<String>()
+        val stepRegex = Regex("(\\d+)\\s*/\\s*(\\d+)")
+        val lineBuf = ByteArrayOutputStream()
+        val stream = proc.inputStream
+        var detectedVulkan = false
+
+        while (true) {
+            val b = stream.read()
+            if (b == -1) break
+            if (b == '\n'.code || b == '\r'.code) {
+                if (lineBuf.size() > 0) {
+                    val line = lineBuf.toString("UTF-8").trim()
+                    lineBuf.reset()
+                    if (line.isNotEmpty()) {
+                        if (logTail.size >= 14) logTail.removeFirst()
+                        logTail.addLast(line)
+                        if (line.contains("Vulkan0", true) || line.contains("ggml_vulkan", true) || line.contains("Adreno", true)) {
+                            if (useGpu) detectedVulkan = true
+                        }
+                        val mStep = stepRegex.find(line)
+                        when {
+                            mStep != null && (line.contains("|") || line.contains("it/s", true) || line.contains("s/it", true)) -> {
+                                val cur = mStep.groupValues[1].toIntOrNull() ?: 0
+                                val tot = mStep.groupValues[2].toIntOrNull() ?: 0
+                                if (tot > 45 && cur <= tot) {
+                                    val pct = 5 + ((cur * 13) / tot)
+                                    val msg = JSONObject.quote("Загрузка весов: $cur / $tot...")
+                                    runOnUiThread { webView.evaluateJavascript("window.onSdProgress($pct, $msg)", null) }
+                                } else if (tot in 1..45 && cur <= tot) {
+                                    val pct = 20 + ((cur * (maxGenPct - 20)) / tot)
+                                    val tag = if (detectedVulkan) "⚡ GPU" else "CPU"
+                                    val msg = JSONObject.quote("$tag • Шаг $cur / $tot...")
+                                    runOnUiThread { webView.evaluateJavascript("window.onSdProgress($pct, $msg)", null) }
+                                }
+                            }
+                            line.contains("decoding", true) || line.contains("decode_first_stage", true) -> {
+                                val vaePct = maxGenPct + 2
+                                runOnUiThread { webView.evaluateJavascript("window.onSdProgress($vaePct, 'Декодирование VAE...')", null) }
+                            }
+                        }
+                    }
+                }
+            } else {
+                lineBuf.write(b)
+            }
+        }
+
+        val exitCode = proc.waitFor()
+        sdProcess = null
+        val errTxt = logTail.takeLast(4).joinToString("\n").ifBlank { "Код выхода: $exitCode" }
+        return Triple(exitCode == 0, detectedVulkan, errTxt)
+    }
+
+    private fun runUpscaleProcess(
+        inputFile: File,
+        outputFile: File,
+        threads: Int,
+        basePct: Int,
+        useGpu: Boolean
+    ): Triple<Boolean, Boolean, String> {
         val bin = resolveSdBinary()
         val upModel = upscalerFile()
-        if (!bin.exists()) return Pair(false, "Движок libvolt_sd.so не найден")
+        if (!bin.exists()) return Triple(false, false, "Движок libvolt_sd.so не найден")
         if (!upModel.exists() || upModel.length() < 10_000_000L) {
-            return Pair(false, "Сначала скачай модель апскейлера Real-ESRGAN (64 МБ)")
+            return Triple(false, false, "Сначала скачай модель апскейлера Real-ESRGAN (64 МБ)")
         }
 
         val cmd = listOf(
@@ -321,15 +401,20 @@ class MainActivity : AppCompatActivity() {
             "-o", outputFile.absolutePath,
             "-t", threads.toString()
         )
+        val tag = if (useGpu) "Vulkan GPU" else "CPU"
         runOnUiThread {
-            webView.evaluateJavascript("window.onSdProgress($basePct, 'Апскейл 4× (Real-ESRGAN)...')", null)
+            webView.evaluateJavascript("window.onSdProgress($basePct, 'Апскейл 4× ($tag)...')", null)
         }
-        val proc = ProcessBuilder(cmd).directory(cacheDir).redirectErrorStream(true).start()
+        val pb = ProcessBuilder(cmd).directory(cacheDir).redirectErrorStream(true)
+        configureSdEnv(pb, useGpu)
+        val proc = pb.start()
         sdProcess = proc
         val tail = ArrayDeque<String>()
         val buf = ByteArrayOutputStream()
         val stream = proc.inputStream
         val pctRegex = Regex("(\\d+)%")
+        var detectedVk = false
+
         while (true) {
             val b = stream.read()
             if (b == -1) break
@@ -340,6 +425,9 @@ class MainActivity : AppCompatActivity() {
                     if (line.isNotEmpty()) {
                         if (tail.size >= 10) tail.removeFirst()
                         tail.addLast(line)
+                        if (useGpu && (line.contains("Vulkan0", true) || line.contains("Adreno", true))) {
+                            detectedVk = true
+                        }
                         val mp = pctRegex.find(line)
                         if (mp != null) {
                             val rawP = mp.groupValues[1].toIntOrNull() ?: 0
@@ -356,9 +444,9 @@ class MainActivity : AppCompatActivity() {
         val code = proc.waitFor()
         sdProcess = null
         return if (code == 0 && outputFile.exists() && outputFile.length() > 1000L) {
-            Pair(true, "")
+            Triple(true, detectedVk, "")
         } else {
-            Pair(false, tail.takeLast(4).joinToString("\n").ifBlank { "Ошибка апскейла (код $code)" })
+            Triple(false, detectedVk, tail.takeLast(4).joinToString("\n").ifBlank { "Ошибка апскейла (код $code)" })
         }
     }
 
@@ -907,7 +995,7 @@ class MainActivity : AppCompatActivity() {
             val hasFp16 = cpuInfo.contains("fphp", true) || cpuInfo.contains("asimdhp", true)
             val hasI8mm = cpuInfo.contains("i8mm", true)
 
-            val simdList = mutableListOf("ARM64 NEON")
+            val simdList = mutableListOf("ARM64 NEON", "Vulkan GPU")
             if (hasDotProd) simdList.add("DotProd")
             if (hasFp16) simdList.add("FP16")
             if (hasI8mm) simdList.add("I8MM")
@@ -921,7 +1009,7 @@ class MainActivity : AppCompatActivity() {
             val supported = JSONArray().apply {
                 put(JSONObject().put("tier", "Volt Ion v2.5 • 1.5B Fast").put("quant", "Qwen 2.5 1.5B • Текст и файлы").put("status", "Максимальная скорость"))
                 put(JSONObject().put("tier", "Volt Neutron v2.6 • 3B Vision").put("quant", "Qwen2.5-VL 3B • Фото + текст").put("status", "Оптимум"))
-                put(JSONObject().put("tier", "Volt Studio • SD + Real-ESRGAN 4×").put("quant", "stable-diffusion.cpp (KleidiAI + q8_0)").put("status", "txt2img / img2img / inpaint / 4x"))
+                put(JSONObject().put("tier", "Volt Studio • SD + Real-ESRGAN 4×").put("quant", "stable-diffusion.cpp (Vulkan GPU + KleidiAI)").put("status", "txt2img / img2img / inpaint / 4x"))
                 if (totalGb >= 7.5) {
                     put(JSONObject().put("tier", "Volt Plasma v3.0 • 8B").put("quant", "Qwen 3 8B Q4_K_M").put("status", if (hasDotProd) "Флагман (DotProd)" else "Флагман"))
                 }
@@ -947,7 +1035,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // === VOLT STUDIO (STABLE DIFFUSION + REAL-ESRGAN 4X) ===
+        // === VOLT STUDIO (STABLE DIFFUSION + VULKAN GPU + REAL-ESRGAN 4X) ===
         @JavascriptInterface
         fun getSdModelsJson(): String {
             val sdDir = sdModelsDir()
@@ -959,7 +1047,7 @@ class MainActivity : AppCompatActivity() {
                     "id" to "sd-turbo",
                     "file" to "sd-turbo.safetensors",
                     "name" to "SD-Turbo (Быстрая)",
-                    "desc" to "4 шага, CFG 1.0 • Максимальная скорость на CPU + отлично с апскейлом 4×",
+                    "desc" to "4 шага, CFG 1.0 • Максимальная скорость на GPU/CPU + отлично с апскейлом 4×",
                     "size_mb" to 1710,
                     "steps" to 4,
                     "cfg" to 1.0,
@@ -1080,6 +1168,7 @@ class MainActivity : AppCompatActivity() {
                     val p = JSONObject(paramsJson)
                     val imgB64 = p.optString("image", "")
                     val threads = p.optInt("threads", 4).coerceIn(1, 6)
+                    val useGpu = p.optBoolean("useGpu", true)
                     if (imgB64.isEmpty()) {
                         runOnUiThread { webView.evaluateJavascript("window.onSdError('Выбери фото для апскейла')", null) }
                         return@thread
@@ -1091,7 +1180,11 @@ class MainActivity : AppCompatActivity() {
                         return@thread
                     }
 
-                    val (ok, errMsg) = runUpscaleProcess(inFile, outFile, threads, 10)
+                    var (ok, usedVk, errMsg) = runUpscaleProcess(inFile, outFile, threads, 10, useGpu)
+                    if (!ok && useGpu && !sdStoppedByUser) {
+                        val retry = runUpscaleProcess(inFile, outFile, threads, 10, false)
+                        ok = retry.first; usedVk = false; errMsg = retry.third
+                    }
                     inFile.delete()
 
                     if (sdStoppedByUser) {
@@ -1106,10 +1199,12 @@ class MainActivity : AppCompatActivity() {
                         MediaScannerConnection.scanFile(this@MainActivity, arrayOf(savedFile.absolutePath), arrayOf("image/png"), null)
                         val dataUrl = "data:image/png;base64," + Base64.encodeToString(outFile.readBytes(), Base64.NO_WRAP)
                         outFile.delete()
-                        val elapsed = (System.currentTimeMillis() - tStart) / 1000.0
+                        val upSec = (System.currentTimeMillis() - tStart) / 1000.0
+                        val backendLabel = if (usedVk) "⚡ Vulkan GPU" else "CPU"
                         val qUrl = JSONObject.quote(dataUrl)
                         val qPath = JSONObject.quote(savedFile.absolutePath)
-                        runOnUiThread { webView.evaluateJavascript("window.onSdDone($qUrl, $qPath, $elapsed, true)", null) }
+                        val qBack = JSONObject.quote(backendLabel)
+                        runOnUiThread { webView.evaluateJavascript("window.onSdDone($qUrl, $qPath, 0.0, $upSec, $qBack)", null) }
                     } else {
                         outFile.delete()
                         val qErr = JSONObject.quote(errMsg)
@@ -1126,7 +1221,7 @@ class MainActivity : AppCompatActivity() {
         fun generateImage(paramsJson: String) {
             thread(name = "VoltSdWorker") {
                 sdStoppedByUser = false
-                val tStart = System.currentTimeMillis()
+                val tGenStart = System.currentTimeMillis()
                 try {
                     val bin = resolveSdBinary()
                     if (!bin.exists()) {
@@ -1155,6 +1250,7 @@ class MainActivity : AppCompatActivity() {
                     val seed = p.optLong("seed", -1L)
                     val threads = p.optInt("threads", 4).coerceIn(1, 6)
                     val quantType = p.optString("quantType", "q8_0")
+                    val useGpu = p.optBoolean("useGpu", true)
                     val autoUpscale = p.optBoolean("autoUpscale", false)
                     val initB64 = p.optString("initImage", "")
                     val maskB64 = p.optString("maskImage", "")
@@ -1201,62 +1297,17 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
 
-                    runOnUiThread {
-                        webView.evaluateJavascript("window.onSdProgress(4, 'Загрузка весов ($quantType)...')", null)
-                    }
-
-                    val pb = ProcessBuilder(cmd).directory(cacheDir).redirectErrorStream(true)
-                    val proc = pb.start()
-                    sdProcess = proc
-
-                    val logTail = ArrayDeque<String>()
-                    val stepRegex = Regex("(\\d+)\\s*/\\s*(\\d+)")
-                    val lineBuf = ByteArrayOutputStream()
-                    val stream = proc.inputStream
                     val maxGenPct = if (autoUpscale) 84 else 94
+                    var (ok, usedVk, errTxt) = runSdOnce(cmd, useGpu, maxGenPct, quantType)
 
-                    while (true) {
-                        val b = stream.read()
-                        if (b == -1) break
-                        if (b == '\n'.code || b == '\r'.code) {
-                            if (lineBuf.size() > 0) {
-                                val line = lineBuf.toString("UTF-8").trim()
-                                lineBuf.reset()
-                                if (line.isNotEmpty()) {
-                                    if (logTail.size >= 12) logTail.removeFirst()
-                                    logTail.addLast(line)
-
-                                    val mStep = stepRegex.find(line)
-                                    when {
-                                        mStep != null && (line.contains("|") || line.contains("it/s", true) || line.contains("s/it", true)) -> {
-                                            val cur = mStep.groupValues[1].toIntOrNull() ?: 0
-                                            val tot = mStep.groupValues[2].toIntOrNull() ?: 0
-                                            if (tot > 45 && cur <= tot) {
-                                                // Загрузка тензоров модели (например 686/686) -> 5%..18%
-                                                val pct = 5 + ((cur * 13) / tot)
-                                                val msg = JSONObject.quote("Загрузка весов: $cur / $tot...")
-                                                runOnUiThread { webView.evaluateJavascript("window.onSdProgress($pct, $msg)", null) }
-                                            } else if (tot in 1..45 && cur <= tot) {
-                                                // Реальные шаги генерации -> 20%..maxGenPct
-                                                val pct = 20 + ((cur * (maxGenPct - 20)) / tot)
-                                                val msg = JSONObject.quote("Генерация: шаг $cur / $tot...")
-                                                runOnUiThread { webView.evaluateJavascript("window.onSdProgress($pct, $msg)", null) }
-                                            }
-                                        }
-                                        line.contains("decoding", true) || line.contains("decode_first_stage", true) -> {
-                                            val vaePct = if (autoUpscale) 86 else 95
-                                            runOnUiThread { webView.evaluateJavascript("window.onSdProgress($vaePct, 'Декодирование VAE...')", null) }
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            lineBuf.write(b)
+                    // Авто-откат на CPU, если Vulkan GPU драйвер упал
+                    if (!ok && useGpu && !sdStoppedByUser) {
+                        runOnUiThread {
+                            webView.evaluateJavascript("window.onSdProgress(6, 'Vulkan недоступен — переключение на CPU...')", null)
                         }
+                        val retry = runSdOnce(cmd, false, maxGenPct, quantType)
+                        ok = retry.first; usedVk = false; errTxt = retry.third
                     }
-
-                    val exitCode = proc.waitFor()
-                    sdProcess = null
 
                     if (sdStoppedByUser) {
                         outFile.delete()
@@ -1264,17 +1315,24 @@ class MainActivity : AppCompatActivity() {
                         return@thread
                     }
 
-                    if (exitCode == 0 && outFile.exists() && outFile.length() > 1000L) {
+                    val genSec = (System.currentTimeMillis() - tGenStart) / 1000.0
+
+                    if (ok && outFile.exists() && outFile.length() > 1000L) {
                         var finalFile = outFile
-                        var didUpscale = false
+                        var upSec = 0.0
 
                         if (autoUpscale && upscalerFile().exists() && upscalerFile().length() > 10_000_000L) {
+                            val tUpStart = System.currentTimeMillis()
                             val upOut = File(cacheDir, "sd_up_${System.currentTimeMillis()}.png")
-                            val (upOk, _) = runUpscaleProcess(outFile, upOut, threads, 88)
+                            var (upOk, _, _) = runUpscaleProcess(outFile, upOut, threads, 88, usedVk)
+                            if (!upOk && usedVk && !sdStoppedByUser) {
+                                val upRetry = runUpscaleProcess(outFile, upOut, threads, 88, false)
+                                upOk = upRetry.first
+                            }
                             if (upOk) {
                                 outFile.delete()
                                 finalFile = upOut
-                                didUpscale = true
+                                upSec = (System.currentTimeMillis() - tUpStart) / 1000.0
                             } else {
                                 upOut.delete()
                             }
@@ -1294,14 +1352,14 @@ class MainActivity : AppCompatActivity() {
                         val dataUrl = "data:image/png;base64," + Base64.encodeToString(pngBytes, Base64.NO_WRAP)
                         finalFile.delete()
 
-                        val elapsed = (System.currentTimeMillis() - tStart) / 1000.0
+                        val backendLabel = if (usedVk) "⚡ Vulkan GPU" else "CPU"
                         val qUrl = JSONObject.quote(dataUrl)
                         val qPath = JSONObject.quote(savedFile.absolutePath)
+                        val qBack = JSONObject.quote(backendLabel)
                         runOnUiThread {
-                            webView.evaluateJavascript("window.onSdDone($qUrl, $qPath, $elapsed, $didUpscale)", null)
+                            webView.evaluateJavascript("window.onSdDone($qUrl, $qPath, $genSec, $upSec, $qBack)", null)
                         }
                     } else {
-                        val errTxt = logTail.takeLast(4).joinToString("\n").ifBlank { "Код выхода: $exitCode" }
                         val qErr = JSONObject.quote(errTxt)
                         runOnUiThread { webView.evaluateJavascript("window.onSdError($qErr)", null) }
                     }

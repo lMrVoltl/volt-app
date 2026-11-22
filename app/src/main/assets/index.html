@@ -431,9 +431,18 @@
         </div>
       </div>
 
-      <div style="margin-top:8px">
-        <div class="grp-sub">Seed (-1 = случайный)</div>
-        <input class="sys-inp" id="sdSeed" type="number" value="-1">
+      <div class="sd-grid-2">
+        <div>
+          <div class="grp-sub">Ускоритель</div>
+          <select id="sdBackend">
+            <option value="gpu" selected>⚡ Vulkan GPU (авто)</option>
+            <option value="cpu">Только CPU</option>
+          </select>
+        </div>
+        <div>
+          <div class="grp-sub">Seed (-1 = случайный)</div>
+          <input class="sys-inp" id="sdSeed" type="number" value="-1">
+        </div>
       </div>
     </div>
 
@@ -982,7 +991,8 @@ function startSdGenerate() {
     setSdBusyUi(true, 'Запуск Real-ESRGAN 4×...');
     VoltAndroid.upscaleImage(JSON.stringify({
       image: document.getElementById('sdBaseCanvas').toDataURL('image/png'),
-      threads: cfg.threads || 4
+      threads: cfg.threads || 4,
+      useGpu: (document.getElementById('sdBackend').value !== 'cpu')
     }));
     return;
   }
@@ -1015,6 +1025,7 @@ function startSdGenerate() {
     seed: parseInt(document.getElementById('sdSeed').value || '-1'),
     threads: cfg.threads || 4,
     quantType: document.getElementById('sdQuant').value || 'q8_0',
+    useGpu: (document.getElementById('sdBackend').value !== 'cpu'),
     autoUpscale: autoUp,
     initImage: (sdMode !== 'txt2img' && sdHasInitImg) ? document.getElementById('sdBaseCanvas').toDataURL('image/png') : '',
     maskImage: (sdMode === 'inpaint' && sdHasInitImg) ? exportBinaryMaskDataUrl() : ''
@@ -1030,12 +1041,15 @@ window.onSdProgress = (pct, msg) => {
   document.getElementById('sdProgText').innerText = msg;
 };
 
-window.onSdDone = (dataUrl, savedPath, elapsedSec, didUpscale) => {
+window.onSdDone = (dataUrl, savedPath, genSec, upSec, backendLabel) => {
   sdLastResultUrl = dataUrl;
   setSdBusyUi(false);
   document.getElementById('sdResImg').src = dataUrl;
-  document.getElementById('sdResMeta').innerText =
-    'Готово за ' + elapsedSec.toFixed(1) + ' с' + (didUpscale ? ' • Апскейл 4×' : '') + ' • Pictures/VoltStudio';
+  const parts = [backendLabel || 'CPU'];
+  if (genSec > 0) parts.push('Генерация: ' + genSec.toFixed(1) + ' с');
+  if (upSec > 0) parts.push('Апскейл 4×: ' + upSec.toFixed(1) + ' с');
+  parts.push('Pictures/VoltStudio');
+  document.getElementById('sdResMeta').innerText = parts.join(' • ');
   document.getElementById('sdResBox').classList.add('show');
   showToast('Сохранено в Галерею!');
 };
